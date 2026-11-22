@@ -2,7 +2,8 @@
 
 <p align="center">
    <img src="asset/Logo.png" alt="Icon">
-   <img width="411" height="675" alt="image" src="https://github.com/user-attachments/assets/02363b13-0c5f-4ae2-a1ba-931dc408a038" />
+<img width="1072" height="688" alt="Screenshot 2026-11-22 at 2 15 07 PM" src="https://github.com/user-attachments/assets/448d059a-fbe5-439f-8fba-1b685340e1c0" />
+
 
 </p>
 
