@@ -147,6 +147,9 @@ static const uint8_t *sfo_value(const uint8_t *sfo, uint32_t n, const char *key,
     return NULL;
 }
 
+static void dump_key(uint32_t p);   /* defined below, next to its file writer */
+
+
 static int has_key(uint32_t p) {
     if (psp_read32(p) < 1536) return 0;
     for (uint32_t i = 0; i < 16; i++) if (psp_read8(p + SD_KEY + i)) return 1;
