@@ -9,7 +9,7 @@
 
 A recompilation project for **Phantasy Star Portable 2 Infinity (PSP2i)**, bringing the game to a native PC environment while preserving the original game's functionality and feel.
 
-**This fork (PSP2I_Recomp_Online)** adds online play: an MMO-capable client build and a self-contained dedicated server with a web admin panel. The single-player build is unchanged unless you build with `-DENABLE_MMO_NET=ON` (client) or `-DBUILD_DEDICATED_SERVER=ON` (server).
+**This fork (PSP2I_Recomp_Online)** adds online play: an MMO-capable client build and a self-contained dedicated 32player server with a web admin panel. The single-player build is unchanged unless you build with `-DENABLE_MMO_NET=ON` (client) or `-DBUILD_DEDICATED_SERVER=ON` (server).
 
 ## Quick Start
 
