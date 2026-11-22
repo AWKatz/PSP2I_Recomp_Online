@@ -2,18 +2,18 @@
 # Static check: every network-related firmware import of the game is answered
 # by the psprecomp network HLE layer, and no network NID is registered outside it.
 #
-#   port/tests/check_net_symbols.sh [port/gen/recomp_imports.c]
+#   port/tests/check_net_symbols.sh [build/gen/recomp_imports.c]
 #
 # "Network-related" = the libraries sceNet*, sceWlanDrv, sceNp*, sceHttp,
 # sceSsl, plus the sceUtility Netconf / PSN dialog NIDs. The network layer is
 # the files listed in NET_FILES. Exit 0 when nothing is unmapped.
 set -eu
 cd "$(dirname "$0")/../.."
-IMPORTS=${1:-port/gen/recomp_imports.c}
+IMPORTS=${1:-build/gen/recomp_imports.c}
 HLE=psprecomp/src/hle
 NET_FILES="$HLE/net.c $HLE/net_sock.c $HLE/offline.c $HLE/http.c"
 [ -d psprecomp/src/net ] && NET_FILES="$NET_FILES $(ls psprecomp/src/net/*.c 2>/dev/null)"
-[ -f "$IMPORTS" ] || { echo "missing $IMPORTS: generate port/gen first" >&2; exit 2; }
+[ -f "$IMPORTS" ] || { echo "missing $IMPORTS: generate build/gen first" >&2; exit 2; }
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 NETLIB='^(sceNet[A-Za-z]*|sceWlanDrv|sceNp[A-Za-z0-9]*|sceHttp|sceSsl)$'

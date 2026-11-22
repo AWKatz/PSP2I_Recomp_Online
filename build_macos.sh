@@ -17,11 +17,21 @@ elif ! git -C psprecomp apply --reverse --check "$patch_file" 2>/dev/null; then
     echo "The macOS runtime patch conflicts with local changes." >&2
     exit 1
 fi
-cmake -S psprecomp -B psprecomp/build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build psprecomp/build --target allegrexrecomp -j 4
-mkdir -p port/gen
-if [[ ! -f port/gen/recomp_funcs.c || EBOOT.BIN -nt port/gen/recomp_funcs.c || port/hooks.txt -nt port/gen/recomp_funcs.c || port/fixes.txt -nt port/gen/recomp_funcs.c ]]; then
-    psprecomp/build/tools/allegrexrecomp/allegrexrecomp emit EBOOT.BIN port/gen recomp --hooks port/hooks.txt --fixes port/fixes.txt --switches port/switches.txt
+cmake -S psprecomp -B build/recomp -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build/recomp --target allegrexrecomp -j 4
+mkdir -p build/gen
+G=build/gen/recomp_funcs.c
+if [[ ! -f $G || EBOOT.BIN -nt $G || port/hooks.txt -nt $G || port/fixes.txt -nt $G || port/switches.txt -nt $G ]]; then
+    build/recomp/tools/allegrexrecomp/allegrexrecomp emit EBOOT.BIN build/gen recomp --hooks port/hooks.txt --fixes port/fixes.txt --switches port/switches.txt
 fi
-cmake -S port/macos -B port/build-macos -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix)"
-cmake --build port/build-macos --target psp2i -j 4
+# ./build_macos.sh         the game (single player):           build/macos/psp2i
+# ./build_macos.sh --mmo   the MMO client and the server:      build/macos-mmo/psp2i, build/macos-mmo/server/psp2i_server
+OUT=build/macos
+EXTRA=()
+if [[ "${1:-}" == --mmo ]]; then
+    OUT=build/macos-mmo
+    EXTRA=(-DENABLE_MMO_NET=ON -DBUILD_DEDICATED_SERVER=ON)
+fi
+cmake -S port/macos -B $OUT -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix)" "${EXTRA[@]}"
+cmake --build $OUT -j 4
+echo "Built $OUT/psp2i$([[ -f $OUT/server/psp2i_server ]] && echo " and $OUT/server/psp2i_server")"

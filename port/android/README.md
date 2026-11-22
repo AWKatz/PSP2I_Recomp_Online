@@ -9,12 +9,12 @@ An Android build of the recompiled game. It contains the psprecomp runtime, an S
 
 ## Building a playable APK
 
-The game's code is C that `allegrexrecomp` generates from your decrypted `EBOOT.BIN` into `port/gen`. That C is derived from the game, so the repository does not include it. CI builds the APK without it: that APK installs and starts, then tells you the game code is missing.
+The game's code is C that `allegrexrecomp` generates from your decrypted `EBOOT.BIN` into `build/gen`. That C is derived from the game, so the repository does not include it. CI builds the APK without it: that APK installs and starts, then tells you the game code is missing.
 
-1. Generate `port/gen` once (the same step as for Windows):
+1. Generate `build/gen` once (the same step as for Windows):
 
    ```
-   psprecomp/build/tools/allegrexrecomp/Release/allegrexrecomp.exe emit EBOOT.BIN port/gen recomp --hooks port/hooks.txt --fixes port/fixes.txt
+   build/recomp/tools/allegrexrecomp/Release/allegrexrecomp.exe emit EBOOT.BIN build/gen recomp --hooks port/hooks.txt --fixes port/fixes.txt
    ```
 
 2. Build. You need JDK 17 and the Android SDK; Android Studio provides both. Open `port/android` in Android Studio, or from a shell:

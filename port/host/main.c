@@ -1601,7 +1601,7 @@ static int dir_exists(const char *p) {
 }
 
 /* The first *.iso next to the exe, in the root, or in the root's parent
- * (FinalBuild keeps the root at ..\GameData, the image beside it). */
+ * (a release folder may keep the root at ..\GameData, the image beside it). */
 static void find_iso(const char *dir, const char *root, char *out, size_t cap) {
 #ifdef _WIN32
     char parent[700];

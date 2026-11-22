@@ -2,11 +2,11 @@
 #
 #   libmain.so         the psprecomp runtime, the SDL3 host (host/sdl_main.c),
 #                      the GE on OpenGL ES 3.0 (host/gl_ge.c) and the game's
-#                      generated code (port/gen) when it is there
+#                      generated code (build/gen) when it is there
 #   libSDL3.so         SDL3, from SDL_DIR (the source app/build.gradle fetches)
 #   libpsp2i_atrac.so  the LGPL ATRAC decoder (atrac_dll/), loaded at run time
 #
-# port/gen is the C that allegrexrecomp generates from your own decrypted
+# build/gen is the C that allegrexrecomp generates from your own decrypted
 # EBOOT.BIN; it is derived from the game, so the repository does not carry it.
 # Without it the app builds (src/gen_stub.c) and says so when started.
 
@@ -26,7 +26,9 @@ add_subdirectory(${SDL_DIR} SDL EXCLUDE_FROM_ALL)
 add_subdirectory(${PSPRECOMP_DIR} psprecomp EXCLUDE_FROM_ALL)
 add_subdirectory(${PORT}/atrac_dll atrac_dll)
 
-if(EXISTS ${PORT}/gen/recomp_funcs.c)
+get_filename_component(_PSP2I_ROOT ${PORT}/.. ABSOLUTE)
+set(PSP2I_GEN_DIR ${_PSP2I_ROOT}/build/gen CACHE PATH "Generated game code (allegrexrecomp emit)")
+if(EXISTS ${PSP2I_GEN_DIR}/recomp_funcs.c)
     # ~200 MB of C in one file is more than clang can hold while optimising
     # (it ran out of memory with 32 GB): split_gen.py cuts it into parts that
     # compile alone, without debug information (-g0). -O2: the parts are small
@@ -34,21 +36,21 @@ if(EXISTS ${PORT}/gen/recomp_funcs.c)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     set(SPLIT_DIR ${CMAKE_BINARY_DIR}/gen_split)
     execute_process(COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/split_gen.py
-                            ${PORT}/gen/recomp_funcs.c ${SPLIT_DIR} 24
+                            ${PSP2I_GEN_DIR}/recomp_funcs.c ${SPLIT_DIR} 24
                     RESULT_VARIABLE split_rc)
     if(NOT split_rc EQUAL 0)
-        message(FATAL_ERROR "split_gen.py could not split port/gen/recomp_funcs.c")
+        message(FATAL_ERROR "split_gen.py could not split build/gen/recomp_funcs.c")
     endif()
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${PORT}/gen/recomp_funcs.c)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${PSP2I_GEN_DIR}/recomp_funcs.c)
     file(GLOB GEN_PARTS ${SPLIT_DIR}/recomp_part_*.c)
-    set(GAME_SOURCES ${GEN_PARTS} ${PORT}/gen/recomp_imports.c)
+    set(GAME_SOURCES ${GEN_PARTS} ${PSP2I_GEN_DIR}/recomp_imports.c)
     set_source_files_properties(${GEN_PARTS} PROPERTIES COMPILE_OPTIONS "-O2;-g0")
     set(HAVE_GAME_CODE ON)
-    message(STATUS "PSP2i: building with the game code in port/gen")
+    message(STATUS "PSP2i: building with the game code in build/gen")
 else()
     set(GAME_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/gen_stub.c)
     set(HAVE_GAME_CODE OFF)
-    message(STATUS "PSP2i: no port/gen; the app will build but cannot start the game")
+    message(STATUS "PSP2i: no build/gen; the app will build but cannot start the game")
 endif()
 
 add_library(main SHARED
@@ -62,7 +64,7 @@ add_library(main SHARED
     ${PORT}/host/postfx.c
     ${PORT}/host/h264_mediacodec.c
     ${GAME_SOURCES})
-target_include_directories(main PRIVATE ${PORT}/host ${PORT}/gen ${CMAKE_BINARY_DIR}/gen_split)
+target_include_directories(main PRIVATE ${PORT}/host ${PSP2I_GEN_DIR} ${CMAKE_BINARY_DIR}/gen_split)
 target_compile_definitions(main PRIVATE PSP2I_GLES)
 if(NOT HAVE_GAME_CODE)
     target_compile_definitions(main PRIVATE PSP2I_NO_GAME_CODE)

@@ -13,7 +13,7 @@ brew install cmake ninja sdl3 ffmpeg
 
 The build script initializes psprecomp, applies the included Apple ARM64 fiber
 patch if needed, generates C from your decrypted EBOOT.BIN, and builds the
-executable at port/build-macos/psp2i. Four compiler jobs limit peak memory use.
+executable at build/macos/psp2i. Four compiler jobs limit peak memory use.
 The patch is also applied in the local psprecomp submodule; preserve that change.
 
 Keep EBOOT.BIN and game.iso in the repository root. The launcher sets PSP2I_DATA
@@ -53,10 +53,10 @@ existing OpenH264 backend. Android does not enable this optional backend.
 Build and run the standalone decoder comparison (no game code executed):
 
 ```sh
-cmake --build port/build-macos --target video_decode
-python3 port/tests/check_video_decode.py port/build-macos/video_decode
+cmake --build build/macos --target video_decode
+python3 port/tests/check_video_decode.py build/macos/video_decode
 # Optionally compare a legally obtained PMF too:
-python3 port/tests/check_video_decode.py port/build-macos/video_decode /path/to/movie.pmf
+python3 port/tests/check_video_decode.py build/macos/video_decode /path/to/movie.pmf
 ```
 
 The test generates 90 frames with B-frame reordering and compares all decoded

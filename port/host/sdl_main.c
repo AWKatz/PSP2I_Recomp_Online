@@ -78,7 +78,7 @@
 #define SCREEN_H 272
 #define USER_PARTITION_TOP 0x0A000000u
 
-void psp_recomp_register(void);          /* the generated code (port/gen), or gen_stub.c */
+void psp_recomp_register(void);          /* the generated code (build/gen), or gen_stub.c */
 
 static char g_base[1024];                /* where the files live */
 static SDL_Window *g_win;
@@ -888,7 +888,7 @@ int main(int argc, char **argv) {
     if (!elf) return 1;
 #ifdef PSP2I_NO_GAME_CODE
     /* The setup above still runs, so the game files can be checked with this build. */
-    fail("The game files are set up and usable.\n\nThis build has no game code, though: generate port/gen "
+    fail("The game files are set up and usable.\n\nThis build has no game code, though: generate build/gen "
          "from your own EBOOT.BIN and build the app yourself (see port/android/README.md).");
     return 1;
 #endif

@@ -3,12 +3,12 @@
 # Builds the psprecomp runtime from the toolkit source next to this directory,
 # the generated C in gen/, and the host in host/. Regenerate gen/ with:
 #
-#   psprecomp/build/tools/allegrexrecomp/Release/allegrexrecomp.exe emit EBOOT.BIN port/gen recomp \
+#   build/recomp/tools/allegrexrecomp/Release/allegrexrecomp.exe emit EBOOT.BIN build/gen recomp \
 #       --hooks port/hooks.txt --fixes port/fixes.txt --switches port/switches.txt
 #
 # Configure and build (MSVC):
-#   cmake -S port -B port/build -G "Visual Studio 17 2022" -A x64
-#   cmake --build port/build --config Release
+#   cmake -S port -B build/windows -G "Visual Studio 17 2022" -A x64
+#   cmake --build build/windows --config Release
 
 cmake_minimum_required(VERSION 3.16)
 project(psp2i C CXX)                        # CXX: the ATRAC decoder DLL (atrac_dll/)
@@ -22,8 +22,11 @@ add_subdirectory(${PSPRECOMP_DIR} psprecomp EXCLUDE_FROM_ALL)
 option(PSP2I_TRACE "Build the generated code with function-entry tracing" OFF)
 # Community build: no command line, data found from the exe's folder, a start-up
 # check of everything needed (host/prod.c); the exe and its DLLs are copied to
-# <project>/prod. Build it in its own tree: cmake -S port -B port/build-prod -DPSP2I_PROD=ON
-option(PSP2I_PROD "Community build: no arguments, checks for its data, copies to ../prod" OFF)
+# <project>/build/prod. Build it in its own tree: cmake -S port -B build/windows-prod -DPSP2I_PROD=ON
+option(PSP2I_PROD "Community build: no arguments, checks for its data, copies to build/prod" OFF)
+
+get_filename_component(_PSP2I_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/.. ABSOLUTE)
+set(PSP2I_GEN_DIR ${_PSP2I_ROOT}/build/gen CACHE PATH "Generated game code (allegrexrecomp emit)")
 
 add_executable(psp2i
     host/main.c
@@ -52,10 +55,10 @@ add_executable(psp2i
     host/prod.c
     host/font_win.c
     ${PSPRECOMP_DIR}/tools/allegrexrecomp/decode.c
-    gen/recomp_funcs.c
-    gen/recomp_imports.c
+    ${PSP2I_GEN_DIR}/recomp_funcs.c
+    ${PSP2I_GEN_DIR}/recomp_imports.c
 )
-target_include_directories(psp2i PRIVATE gen ${PSPRECOMP_DIR}/tools/allegrexrecomp)
+target_include_directories(psp2i PRIVATE ${PSP2I_GEN_DIR} ${PSPRECOMP_DIR}/tools/allegrexrecomp)
 include(${CMAKE_CURRENT_SOURCE_DIR}/savecrypt.cmake)
 if(BUILD_DEDICATED_SERVER)   # the dedicated server, next to the game
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../server ${CMAKE_BINARY_DIR}/server)
@@ -66,7 +69,7 @@ if(MSVC)
     # The generated translation unit is ~200 MB of C. /bigobj for its section
     # count; /O1 keeps the optimiser's time and memory bounded on it.
     target_compile_options(psp2i PRIVATE /bigobj /W1)
-    set_source_files_properties(gen/recomp_funcs.c PROPERTIES COMPILE_OPTIONS "/O1;/Gy")
+    set_source_files_properties(${PSP2I_GEN_DIR}/recomp_funcs.c PROPERTIES COMPILE_OPTIONS "/O1;/Gy")
     target_link_options(psp2i PRIVATE /STACK:16777216)
     target_link_libraries(psp2i PRIVATE user32 gdi32 dbghelp winmm d3d11 d3dcompiler dxguid secur32 crypt32 ws2_32 winhttp bcrypt ole32)
     # Symbols for the crash report (and a debugger). /Zi does not change the
@@ -160,10 +163,11 @@ if(PSP2I_PROD)
 ")
         target_sources(psp2i PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/psp2i_icon.rc)
     endif()
-    set(PSP2I_PROD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../prod CACHE PATH "Where the community build is copied")
+    set(PSP2I_PROD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../build/prod CACHE PATH "Where the community build is copied")
     add_custom_command(TARGET psp2i POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory ${PSP2I_PROD_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:psp2i> ${PSP2I_PROD_DIR}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/prod_README.txt ${PSP2I_PROD_DIR}/README.txt
         COMMENT "Copying the community build to ${PSP2I_PROD_DIR}")
     if(PSP2I_SDL3_PATH)
         add_custom_command(TARGET psp2i POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PSP2I_SDL3_PATH} ${PSP2I_PROD_DIR})

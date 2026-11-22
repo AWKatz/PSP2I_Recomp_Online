@@ -1,22 +1,22 @@
 @echo off
 rem Build the COMMUNITY build (PSP2I_PROD): no command line, data found from the exe's folder, icon from
-rem asset\icon.ico. The result is copied into prod\ together with SDL3.dll and the FFmpeg DLLs by the
-rem build itself. It never touches prod\GameData.
+rem asset\icon.ico. The result is copied into build\prod\ together with SDL3.dll and the FFmpeg DLLs by the
+rem build itself. It never touches build\prod\GameData.
 rem
-rem   build_prod.bat           regenerate port\gen, compile + copy into prod\ (the same as
+rem   build_prod.bat           regenerate build\gen, compile + copy into build\prod\ (the same as
 rem                            "build_prod.bat regen"; double-clicking does this and waits at the end)
-rem   build_prod.bat quick     compile + copy only (port\gen already current)
+rem   build_prod.bat quick     compile + copy only (build\gen already current)
 rem
-rem Uses its own build tree (port\build-prod), separate from the port build. Never test inside prod\.
+rem Uses its own build tree (build\windows-prod), separate from the port build. Never test inside build\prod\.
 setlocal
 set "MODE=%~1"
 if "%MODE%"=="" set "MODE=regen"
 set "ROOT=%~dp0"
 cd /d "%ROOT%"
 
-if not exist "%ROOT%port\testwork\tmp" mkdir "%ROOT%port\testwork\tmp"
-set "TEMP=%ROOT%port\testwork\tmp"
-set "TMP=%ROOT%port\testwork\tmp"
+if not exist "%ROOT%build\tmp" mkdir "%ROOT%build\tmp"
+set "TEMP=%ROOT%build\tmp"
+set "TMP=%ROOT%build\tmp"
 
 set "CMAKE=cmake"
 where cmake >nul 2>nul
@@ -24,30 +24,31 @@ if errorlevel 1 set "CMAKE=C:\Program Files\Microsoft Visual Studio\2022\Communi
 
 if /i "%MODE%"=="regen" (
     echo == Rebuilding the recompiler ==
-    "%CMAKE%" -S psprecomp -B psprecomp\build
+    "%CMAKE%" -S psprecomp -B build\recomp
     if errorlevel 1 goto failed
-    "%CMAKE%" --build psprecomp\build --config Release --target allegrexrecomp
+    "%CMAKE%" --build build\recomp --config Release --target allegrexrecomp
     if errorlevel 1 goto failed
-    echo == Regenerating port\gen from FinalBuild\EBOOT.BIN ==
-    pushd port
-    ..\psprecomp\build\tools\allegrexrecomp\Release\allegrexrecomp.exe emit ..\FinalBuild\EBOOT.BIN gen recomp --hooks hooks.txt --fixes fixes.txt --switches switches.txt
-    if errorlevel 1 (popd & goto failed)
-    popd
+    set "EBOOT=%ROOT%EBOOT.BIN"
+    if not exist "%ROOT%EBOOT.BIN" if exist "%ROOT%build\dist\EBOOT.BIN" set "EBOOT=%ROOT%build\dist\EBOOT.BIN"
+    echo == Regenerating build\gen from EBOOT.BIN ==
+    if not exist "build\gen" mkdir "build\gen"
+    build\recomp\tools\allegrexrecomp\Release\allegrexrecomp.exe emit "%EBOOT%" build\gen recomp --hooks port\hooks.txt --fixes port\fixes.txt --switches port\switches.txt
+    if errorlevel 1 goto failed
 )
 
 echo == Building the community build ==
-"%CMAKE%" -S port -B port\build-prod -DPSP2I_PROD=ON
+"%CMAKE%" -S port -B build\windows-prod -DPSP2I_PROD=ON
 if errorlevel 1 goto failed
-"%CMAKE%" --build port\build-prod --config Release --parallel --target psp2i
+"%CMAKE%" --build build\windows-prod --config Release --parallel --target psp2i
 if errorlevel 1 goto failed
 
 echo.
-echo Done: %ROOT%prod\psp2i.exe
+echo Done: %ROOT%build\prod\psp2i.exe
 if "%~1"=="" pause
 exit /b 0
 
 :failed
 echo.
-echo BUILD FAILED. (If the copy into prod failed, close psp2i.exe first.)
+echo BUILD FAILED. (If the copy into build\prod failed, close psp2i.exe first.)
 if "%~1"=="" pause
 exit /b 1

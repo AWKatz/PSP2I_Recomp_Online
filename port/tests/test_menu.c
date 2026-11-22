@@ -2,8 +2,8 @@
  * frame-rate switching (host/framerate.c, against the psprecomp hook and
  * dispatch runtime with stand-ins for the game's functions).
  *
- *   cmake --build port/build --config Release --target test_menu
- *   port/build/Release/test_menu.exe        (or: ctest -C Release) */
+ *   cmake --build build/windows --config Release --target test_menu
+ *   build/windows/Release/test_menu.exe        (or: ctest -C Release) */
 
 #include "menu.h"
 #include "framerate.h"

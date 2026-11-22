@@ -1,4 +1,4 @@
-"""Split port/gen/recomp_funcs.c into several translation units for clang.
+"""Split build/gen/recomp_funcs.c into several translation units for clang.
 
 allegrexrecomp writes the game's code as one ~200 MB C file. MSVC compiles it
 function by function; clang keeps a whole translation unit in memory while it

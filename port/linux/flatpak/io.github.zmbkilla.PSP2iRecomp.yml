@@ -1,7 +1,7 @@
 # Flatpak for PSP2i Recompiled (Linux desktop and the Steam Deck).
 #
 # Build on the Deck (or any x86_64/arm64 Linux) from the repository root,
-# after port/gen has been generated from your EBOOT.BIN:
+# after build/gen has been generated from your EBOOT.BIN:
 #   port/linux/flatpak/build_flatpak.sh
 # The game itself (EBOOT.BIN, the ISO, fonts, saves) is not packaged: it is
 # read from ~/.var/app/io.github.zmbkilla.PSP2iRecomp/data/psp2i (see README.md).
@@ -81,16 +81,13 @@ modules:
       - type: dir
         path: ../../..
         skip:
-          - port/build-macos
-          - port/build-prod
-          - port/linux/flatpak/.flatpak-builder
-          - port/linux/flatpak/build-dir
-          - port/linux/flatpak/repo
-          - psp2i.flatpak
-          - .git
-          - psprecomp/build
+          - build             # build output; the generated game code comes in below
           - GameData
           - game.iso
           - EBOOT.BIN
           - logs
-          - prod
+          - psp2i.flatpak
+          - .git
+      - type: dir
+        path: ../../../build/gen
+        dest: build/gen

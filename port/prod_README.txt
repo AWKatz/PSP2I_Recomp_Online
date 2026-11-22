@@ -1,7 +1,7 @@
 Phantasy Star Portable 2 Infinity (NPJH50332) - PC port
 =======================================================
 
-This folder is the community build. It contains no game files: you need your
+This folder (build\prod) is the community build. It contains no game files: you need your
 own copy of the game.
 
 Setup

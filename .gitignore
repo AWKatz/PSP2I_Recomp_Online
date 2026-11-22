@@ -8,7 +8,7 @@
 game.iso
 EBOOT.BIN
 # extracted UMD (textures, models, audio, video), firmware fonts, memory stick
-GameData/
+GameData/flash0/*
 # C generated from the game's code (derived from the EBOOT)
 Output/
 port/gen/
@@ -40,10 +40,13 @@ port/implemented.txt
 *.sfo
 
 # ---- builds and third-party binaries -----------------------------------------
+# Everything built or generated goes under build/ (see README "Quick Start").
+build/
+# older locations, in case a checkout still has them
 FinalBuild/
 port/build/
 port/build-*/
-build/
+psprecomp/build/
 *.exe
 *.dll
 *.pdb
@@ -73,9 +76,8 @@ debugscreen/
 # third-party runtime libraries (FFmpeg for ATRAC music), kept local
 ffmpeg-*/
 
-# ---- community build output (prod/): binaries and the user's game data stay local
-prod/*
-!prod/README.txt
+# ---- older community build location (now build/prod)
+prod/
 
 # my test artifacts (captures, logs, save copies)
 port/testwork/
@@ -105,8 +107,5 @@ port/android/app/build/
 port/android/app/.cxx/
 port/android/local.properties
 
-# Flatpak build output
-port/linux/flatpak/.flatpak-builder/
-port/linux/flatpak/build-dir/
-port/linux/flatpak/repo/
+# Flatpak (its output is under build/flatpak)
 psp2i.flatpak

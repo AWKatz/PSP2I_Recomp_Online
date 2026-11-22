@@ -1,9 +1,9 @@
 @echo off
-rem Build the port and hand it to the user for testing: copies psp2i.exe and psp2i.pdb into FinalBuild\.
+rem Build the port and hand it to the user for testing: copies psp2i.exe and psp2i.pdb into build\dist\.
 rem
 rem   build_finalbuild.bat           port build, then copy
-rem   build_finalbuild.bat regen     regenerate port\gen first (see build_port.bat)
-rem   build_finalbuild.bat server    also publish the SEGA test server into FinalBuild\sega_server
+rem   build_finalbuild.bat regen     regenerate build\gen first (see build_port.bat)
+rem   build_finalbuild.bat server    also publish the SEGA test server into build\dist\sega_server
 rem                                  (close the running server first; it locks its files)
 rem
 rem Close the game first: a running psp2i.exe cannot be overwritten.
@@ -21,18 +21,19 @@ if /i "%~2"=="regen" set "REGEN=regen"
 call "%ROOT%build_port.bat" %REGEN%
 if errorlevel 1 goto failed
 
-echo == Copying to FinalBuild ==
-copy /y "%ROOT%port\build\Release\psp2i.exe" "%ROOT%FinalBuild\" >nul
+echo == Copying to build\dist ==
+if not exist "%ROOT%build\dist" mkdir "%ROOT%build\dist"
+copy /y "%ROOT%build\windows\Release\psp2i.exe" "%ROOT%build\dist\" >nul
 if errorlevel 1 goto locked
-copy /y "%ROOT%port\build\Release\psp2i.pdb" "%ROOT%FinalBuild\" >nul
+copy /y "%ROOT%build\windows\Release\psp2i.pdb" "%ROOT%build\dist\" >nul
 if errorlevel 1 goto locked
 rem ATRAC music decoder (LGPL, its own DLL) with its licence files, and SDL3 (fetched by CMake).
-if exist "%ROOT%port\build\Release\psp2i_atrac.dll" (
-    copy /y "%ROOT%port\build\Release\psp2i_atrac.dll" "%ROOT%FinalBuild\" >nul
+if exist "%ROOT%build\windows\Release\psp2i_atrac.dll" (
+    copy /y "%ROOT%build\windows\Release\psp2i_atrac.dll" "%ROOT%build\dist\" >nul
     if errorlevel 1 goto locked
-    xcopy /y /q /i "%ROOT%port\build\Release\licenses" "%ROOT%FinalBuild\licenses" >nul
+    xcopy /y /q /i "%ROOT%build\windows\Release\licenses" "%ROOT%build\dist\licenses" >nul
 )
-if exist "%ROOT%port\build\Release\SDL3.dll" copy /y "%ROOT%port\build\Release\SDL3.dll" "%ROOT%FinalBuild\" >nul
+if exist "%ROOT%build\windows\Release\SDL3.dll" copy /y "%ROOT%build\windows\Release\SDL3.dll" "%ROOT%build\dist\" >nul
 
 if defined SERVER (
     echo == Publishing the SEGA server ==
@@ -41,18 +42,18 @@ if defined SERVER (
         goto failed
     )
     pushd port\tools\sega_server
-    dotnet publish -c Release -o "%ROOT%FinalBuild\sega_server"
+    dotnet publish -c Release -o "%ROOT%build\dist\sega_server"
     if errorlevel 1 (popd & goto failed)
     popd
 )
 
 echo.
-echo Done: FinalBuild\psp2i.exe is up to date.
+echo Done: build\dist\psp2i.exe is up to date.
 exit /b 0
 
 :locked
 echo.
-echo Could not copy into FinalBuild. Is psp2i.exe still running?
+echo Could not copy into build\dist. Is psp2i.exe still running?
 :failed
 echo.
 echo BUILD FAILED.

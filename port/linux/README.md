@@ -13,11 +13,11 @@ Linux uses the same SDL3 host as macOS and Android (`port/sdl_desktop.cmake`), w
    ```
 
    The script does three things:
-   - Generates `port/gen` from `EBOOT.BIN` if it isn't already there.
+   - Generates `build/gen` from `EBOOT.BIN` if it isn't already there.
    - Builds the Flatpak: SDL3 3.4.20, a minimal FFmpeg 9.0.2 for movie playback, and the game, on the `org.freedesktop.Platform` 25.08 runtime.
    - Installs the Flatpak for your user.
 
-   Generating `port/gen` needs cmake, ninja and a C compiler. On the Deck those are easiest inside distrobox. You can also copy `port/gen` over from a machine that has already built the game, and the script will skip that step.
+   Generating `build/gen` needs cmake, ninja and a C compiler. On the Deck those are easiest inside distrobox. You can also copy `build/gen` over from a machine that has already built the game, and the script will skip that step.
 
    To get a single `psp2i.flatpak` file you can copy to other machines, add `--bundle`.
 
@@ -42,9 +42,9 @@ The MMO client is off in this build. To turn it on, set `-DENABLE_MMO_NET=ON` in
 ## Building without Flatpak
 
 ```sh
-cmake -S port/linux -B port/build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build port/build-linux --target psp2i
-PSP2I_DATA=$PWD port/build-linux/psp2i
+cmake -S port/linux -B build/linux -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build/linux --target psp2i
+PSP2I_DATA=$PWD build/linux/psp2i
 ```
 
 This needs SDL3 and FFmpeg development packages. If you don't have FFmpeg, add `-DPSP2I_LIBAV=OFF`; the movies will then be black.
