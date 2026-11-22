@@ -168,7 +168,10 @@ static int t_send_packet(void *ctx, const psp_net_peer *to, int channel, uint16_
     b[0] = MSG_DATA;
     memcpy(b + 1, e->self_mac, 6);
     put_u64(b + 7, e->self_id);
-    memcpy(b + 15, to ? to->mac : BROADCAST, 6);
+    /* a client addressing the host by id: the host's MAC (from WELCOME) */
+    const uint8_t *dst = !to ? BROADCAST
+                       : (!e->is_host && to->id && to->id == e->slots[0].id) ? e->slots[0].mac : to->mac;
+    memcpy(b + 15, dst, 6);
     b[21] = (uint8_t)port; b[22] = (uint8_t)(port >> 8);
     if (len) memcpy(b + DATA_HDR, data, len);
     const size_t n = DATA_HDR + len;

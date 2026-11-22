@@ -149,7 +149,15 @@ void psp_hle_dump_calls(FILE *out, int top) {
                 (unsigned long long)g_calls[idx[i]]);
 }
 
+static uint32_t g_cur_nid;
+const char *psp_hle_name_of(uint32_t nid) {
+    for (int i = 0; i < g_count; i++) if (g_entry[i].nid == nid) return g_entry[i].name;
+    return NULL;
+}
+uint32_t psp_hle_current_nid(void) { return g_cur_nid; }
+
 void psp_hle_call(uint32_t nid) {
+    g_cur_nid = nid;
     for (int i = 0; i < g_count; i++) {
         if (g_entry[i].nid == nid) {
             g_calls[i]++;
@@ -221,4 +229,7 @@ void psp_hle_init(void) {
     psp_net_register();
     psp_http_register();
     psp_offline_register();
+#ifdef PSPRECOMP_MMO_NET
+    psp_net_mmo_register();     /* replaces the ad hoc stubs (src/net/adhoc_mmo.c) */
+#endif
 }

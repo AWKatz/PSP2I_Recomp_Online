@@ -84,7 +84,7 @@ if(ENABLE_MMO_NET)
         target_compile_options(enet PRIVATE -w)   # third-party: not our warnings
     endif()
 
-    target_sources(psprecomp PRIVATE src/net/transport.c src/net/enet_transport.c)
+    target_sources(psprecomp PRIVATE src/net/transport.c src/net/enet_transport.c src/net/adhoc_mmo.c src/net/toml_lite.c)
     target_compile_definitions(psprecomp PUBLIC PSPRECOMP_MMO_NET=1)
     target_link_libraries(psprecomp PUBLIC enet)
 endif()

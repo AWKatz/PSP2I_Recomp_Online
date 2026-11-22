@@ -10,6 +10,7 @@
  * check, and the ad hoc actions of the network dialog fail (net.c). */
 
 #include "psprecomp/hle.h"
+#include "psprecomp/net.h"
 
 #include <stdio.h>
 
@@ -86,4 +87,10 @@ static const struct { uint32_t nid; const char *lib, *name; int succeeds; } STUB
 void psp_offline_register(void) {
     for (size_t i = 0; i < sizeof STUBS / sizeof STUBS[0]; i++)
         psp_hle_register(STUBS[i].nid, STUBS[i].lib, STUBS[i].name, STUBS[i].succeeds ? ok : fail);
+}
+
+int psp_offline_stub(int i, uint32_t *nid, const char **lib, const char **name, int *succeeds) {
+    if (i < 0 || (size_t)i >= sizeof STUBS / sizeof STUBS[0]) return 0;
+    *nid = STUBS[i].nid; *lib = STUBS[i].lib; *name = STUBS[i].name; *succeeds = STUBS[i].succeeds;
+    return 1;
 }

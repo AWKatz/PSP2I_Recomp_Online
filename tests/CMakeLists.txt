@@ -64,4 +64,16 @@ if(ENABLE_MMO_NET)
     add_executable(test_enet_transport test_enet_transport.c)
     target_link_libraries(test_enet_transport PRIVATE psprecomp)
     add_test(NAME enet_transport COMMAND test_enet_transport)
+
+    add_executable(test_toml_lite test_toml_lite.c)
+    target_link_libraries(test_toml_lite PRIVATE psprecomp)
+    add_test(NAME toml_lite COMMAND test_toml_lite)
+
+    add_executable(test_mmo_handshake test_mmo_handshake.c)
+    target_link_libraries(test_mmo_handshake PRIVATE psprecomp)
+    add_test(NAME mmo_handshake COMMAND test_mmo_handshake)
+
+    # not a test: a stand-in server that prints client handshakes (Task 1.3 check)
+    add_executable(mmo_listen mmo_listen.c)
+    target_link_libraries(mmo_listen PRIVATE psprecomp)
 endif()

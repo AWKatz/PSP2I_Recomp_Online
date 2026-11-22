@@ -203,6 +203,17 @@ void psp_net_log_line(const char *fmt, ...) {       /* for net_sock.c */
     if (g_net_log) g_net_log(line);
 }
 
+/* The same log, for the rest of the network layer (src/net). */
+void psp_net_log(const char *fmt, ...) {
+    char line[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(line, sizeof line, fmt, ap);
+    va_end(ap);
+    fprintf(stderr, "net: %s\n", line);
+    if (g_net_log) g_net_log(line);
+}
+
 static void net_log(const char *fmt, ...) {
     char line[1024];
     va_list ap;
@@ -217,8 +228,11 @@ static void net_log(const char *fmt, ...) {
 
 /* 1 = the WLAN switch is on. A PSP game shows "the WLAN switch is OFF" for
  * 0, so this follows the host's connection. */
+static int g_wlan_forced_on;
+void psp_net_set_wlan_forced_on(int on) { g_wlan_forced_on = on != 0; }
+
 static void hle_WlanGetSwitchState(void) {
-    psp_ret(psp_net_host_info(NULL) ? 1u : 0u);
+    psp_ret(g_wlan_forced_on || psp_net_host_info(NULL) ? 1u : 0u);
 }
 
 static void hle_WlanGetEtherAddr(void) {
@@ -556,8 +570,9 @@ void psp_net_register(void) {
     psp_hle_register(0x6332AA39, "sceUtility", "sceUtilityNetconfGetStatus",     hle_NetconfGetStatus);
     psp_hle_register(0xF88155F6, "sceUtility", "sceUtilityNetconfShutdownStart", hle_NetconfShutdownStart);
 
-    /* imported by PSP2i, not implemented: see hle_NetUnmapped. Names unverified. */
-    psp_hle_register(0xCC393E48, "sceNet",         "sceNetGetLocalEtherAddr", hle_NetUnmapped);
+    /* imported by PSP2i, not implemented: see hle_NetUnmapped. Names checked against
+     * their NIDs (test_hle); the NP ones are unidentified, so unnamed. */
+    psp_hle_register(0xCC393E48, "sceNet",         "sceNetGetMallocStat",     hle_NetUnmapped);
     psp_hle_register(0x162E6FD5, "sceNetInet",     "sceNetInetGetsockname",   hle_NetUnmapped);
     psp_hle_register(0xE247B6D6, "sceNetInet",     "sceNetInetGetpeername",   hle_NetUnmapped);
     psp_hle_register(0xB3888AD4, "sceNetInet",     "sceNetInetGetTcpcbstat",  hle_NetUnmapped);

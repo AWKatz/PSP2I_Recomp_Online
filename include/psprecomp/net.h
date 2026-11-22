@@ -31,6 +31,8 @@ void psp_net_set_forced_off(int off);
 void psp_net_ether_addr(uint8_t mac[6]);
 /* Every network event line (resolver lookups, the network dialog), for a log file. */
 void psp_net_set_log(void (*fn)(const char *line));
+/* Write a line to that log (and stderr). */
+void psp_net_log(const char *fmt, ...);
 /* Name redirection for the resolver: fn returns the host name to look up
  * instead of `host`, or NULL to look up `host` itself (a game's own servers
  * pointed at a replacement). */
@@ -65,6 +67,24 @@ void psp_http_register(void);
 /* PSN, NP matching and ad hoc are not provided: offline.c answers their
  * imports as unavailable. */
 void psp_offline_register(void);
+/* offline.c's stub table, for layers that replace it (MMO build). Returns 0 past the end. */
+int  psp_offline_stub(int i, uint32_t *nid, const char **lib, const char **name, int *succeeds);
+
+/* ---- MMO build (ENABLE_MMO_NET) ---------------------------------------------------- */
+/* Nonzero: the WLAN switch always reads on, whatever the host's connection. */
+void psp_net_set_wlan_forced_on(int on);
+#ifdef PSPRECOMP_MMO_NET
+typedef struct {
+    const char *server;       /* "ip:port" the ad hoc layer joins */
+    const char *player_name;  /* sent in the handshake */
+    const char *version;      /* client build/version string, sent in the handshake */
+} psp_net_mmo_config;
+/* Copied. Call before the game starts. */
+void psp_net_mmo_configure(const psp_net_mmo_config *cfg);
+void psp_net_mmo_register(void);
+/* Service the transport once (call every frame from the host). */
+void psp_net_mmo_pump(void);
+#endif
 
 #ifdef __cplusplus
 }

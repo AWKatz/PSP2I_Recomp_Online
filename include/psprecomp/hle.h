@@ -35,6 +35,10 @@ typedef void (*psp_hle_fn)(void);
  * the NID is verified against. */
 void psp_hle_register(uint32_t nid, const char *lib, const char *name, psp_hle_fn fn);
 void psp_hle_register_unnamed(uint32_t nid, const char *lib, psp_hle_fn fn);
+/* The NID of the firmware call being handled (for shared handlers). */
+uint32_t psp_hle_current_nid(void);
+/* The name registered for a NID, or NULL. */
+const char *psp_hle_name_of(uint32_t nid);
 int psp_hle_is_named(int index);
 
 /* Call a firmware function by NID. An unregistered NID reports itself by name
