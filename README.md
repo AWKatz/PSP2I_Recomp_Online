@@ -2,6 +2,8 @@
 
 <p align="center">
    <img src="asset/Logo.png" alt="Icon">
+   <img width="411" height="675" alt="image" src="https://github.com/user-attachments/assets/02363b13-0c5f-4ae2-a1ba-931dc408a038" />
+
 </p>
 
 A recompilation project for **Phantasy Star Portable 2 Infinity (PSP2i)**, bringing the game to a native PC environment while preserving the original game's functionality and feel.
