@@ -41,7 +41,7 @@ static void log_line(const char *line) { printf("%s\n", line); fflush(stdout); }
 int main(int argc, char **argv) {
     const int port = argc > 1 ? atoi(argv[1]) : 29001;
     const int seconds = argc > 2 ? atoi(argv[2]) : 60;
-    psp_net_enet_config cfg = { NULL, (uint16_t)port, 0, log_line, NULL, NULL };
+    psp_net_enet_config cfg = { .port = (uint16_t)port, .log = log_line };
     g_e = psp_net_enet_create(&cfg);
     const psp_net_transport *t = psp_net_enet_transport(g_e);
     const uint8_t server_mac[6] = { 0x02, 0x50, 0x32, 0x49, 0x00, 0x01 };

@@ -25,6 +25,7 @@ typedef struct {
     uint8_t   mac[6];
     uint64_t  id;
     int       welcomed;
+    int       authorized;   /* relay_authorized_only: may relay and be relayed to */
 } slot;
 
 struct psp_net_enet {
@@ -36,6 +37,7 @@ struct psp_net_enet {
     uint64_t  self_id, next_id;
     slot      slots[MAX_PEERS_CAP];   /* host: clients; client: [0] = the host */
     int       max_slots;
+    uint32_t  disc_reason;    /* client: why the host disconnected us */
     uint8_t   buf[DATA_HDR + PSP_NET_MAX_PAYLOAD];
 };
 
@@ -168,9 +170,10 @@ static int t_send_packet(void *ctx, const psp_net_peer *to, int channel, uint16_
     b[0] = MSG_DATA;
     memcpy(b + 1, e->self_mac, 6);
     put_u64(b + 7, e->self_id);
-    /* a client addressing the host by id: the host's MAC (from WELCOME) */
-    const uint8_t *dst = !to ? BROADCAST
-                       : (!e->is_host && to->id && to->id == e->slots[0].id) ? e->slots[0].mac : to->mac;
+    /* addressed by id alone: the peer's MAC (a client's host from WELCOME,
+     * the host's clients from their HELLO), so the receiver accepts it */
+    const slot *by_id = to && to->id ? (e->is_host ? slot_by_dest(e, to) : (to->id == e->slots[0].id ? &e->slots[0] : NULL)) : NULL;
+    const uint8_t *dst = !to ? BROADCAST : by_id ? by_id->mac : to->mac;
     memcpy(b + 15, dst, 6);
     b[21] = (uint8_t)port; b[22] = (uint8_t)(port >> 8);
     if (len) memcpy(b + DATA_HDR, data, len);
@@ -212,7 +215,13 @@ static int handle_event(psp_net_enet *e, ENetEvent *ev, psp_net_packet_fn fn, vo
     case ENET_EVENT_TYPE_DISCONNECT: {
         slot *s = slot_by_peer(e, ev->peer);
         if (s) {
-            elog(e, "enet: peer %llu left", (unsigned long long)s->id);
+            if (e->is_host) {
+                elog(e, "enet: peer %llu left", (unsigned long long)s->id);
+                if (s->welcomed && e->cfg.on_peer) e->cfg.on_peer(e->cfg.host_user, s->id, s->mac, 0);
+            } else {
+                e->disc_reason = ev->data;
+                elog(e, "enet: disconnected by the host (reason %u)", (unsigned)ev->data);
+            }
             memset(s, 0, sizeof *s);
         }
         break;
@@ -232,12 +241,14 @@ static int handle_event(psp_net_enet *e, ENetEvent *ev, psp_net_packet_fn fn, vo
             enet_host_flush(e->host);
             elog(e, "enet: peer %02X:%02X:%02X:%02X:%02X:%02X joined as id %llu",
                  s->mac[0], s->mac[1], s->mac[2], s->mac[3], s->mac[4], s->mac[5], (unsigned long long)s->id);
+            if (e->cfg.on_peer) e->cfg.on_peer(e->cfg.host_user, s->id, s->mac, 1);
         } else if (!e->is_host && d[0] == MSG_WELCOME && n >= WELCOME_LEN) {
             e->self_id = get_u64(d + 1);
             memcpy(s->mac, d + 9, 6);
             s->id = get_u64(d + 15);
             s->welcomed = 1;
-        } else if (d[0] == MSG_DATA && n >= DATA_HDR && s->welcomed) {
+        } else if (d[0] == MSG_DATA && n >= DATA_HDR && s->welcomed &&
+                   (!e->is_host || !e->cfg.admit || e->cfg.admit(e->cfg.host_user, s->id, (uint32_t)(n - DATA_HDR)))) {
             psp_net_packet pk;
             if (e->is_host) {                              /* the sender is who the connection says */
                 memcpy(pk.from.mac, s->mac, 6); pk.from.id = s->id;
@@ -250,7 +261,8 @@ static int handle_event(psp_net_enet *e, ENetEvent *ev, psp_net_packet_fn fn, vo
             pk.len = (uint32_t)(n - DATA_HDR);
             pk.data = d + DATA_HDR;
             const int bcast = memcmp(dst, BROADCAST, 6) == 0;
-            if (e->is_host && !(memcmp(dst, e->self_mac, 6) == 0)) {
+            const int may_relay = !e->cfg.relay_authorized_only || s->authorized;
+            if (e->is_host && may_relay && !(memcmp(dst, e->self_mac, 6) == 0)) {
                 /* relay: re-stamp the source, forward on the same channel */
                 uint8_t *b = e->buf;
                 memcpy(b, d, n);
@@ -258,6 +270,7 @@ static int handle_event(psp_net_enet *e, ENetEvent *ev, psp_net_packet_fn fn, vo
                 for (int i = 0; i < e->max_slots; i++) {
                     slot *o = &e->slots[i];
                     if (!o->peer || !o->welcomed || o == s) continue;
+                    if (e->cfg.relay_authorized_only && !o->authorized) continue;
                     if (bcast || memcmp(o->mac, dst, 6) == 0) raw_send(e, o->peer, ev->channelID, b, n);
                 }
                 enet_host_flush(e->host);
@@ -317,6 +330,53 @@ uint16_t psp_net_enet_port(const psp_net_enet *e) {
 }
 
 uint64_t psp_net_enet_self_id(const psp_net_enet *e) { return e->self_id; }
+
+static slot *slot_by_id(const psp_net_enet *e, uint64_t id) {
+    for (int i = 0; i < e->max_slots; i++)
+        if (e->slots[i].peer && e->slots[i].welcomed && e->slots[i].id == id) return (slot *)&e->slots[i];
+    return NULL;
+}
+
+int psp_net_enet_authorize(psp_net_enet *e, uint64_t id, int on) {
+    slot *s = e->is_host ? slot_by_id(e, id) : NULL;
+    if (!s) return PSP_NET_ERR_NO_PEER;
+    s->authorized = on != 0;
+    return PSP_NET_OK;
+}
+
+int psp_net_enet_disconnect(psp_net_enet *e, uint64_t id, uint32_t reason) {
+    slot *s = e->is_host ? slot_by_id(e, id) : NULL;
+    if (!s) return PSP_NET_ERR_NO_PEER;
+    if (e->cfg.on_peer) e->cfg.on_peer(e->cfg.host_user, s->id, s->mac, 0);
+    elog(e, "enet: disconnecting peer %llu (reason %u)", (unsigned long long)id, (unsigned)reason);
+    enet_peer_disconnect_later(s->peer, reason);   /* after queued packets (e.g. a reject ACK) */
+    enet_host_flush(e->host);
+    memset(s, 0, sizeof *s);                      /* its DISCONNECT event finds no slot */
+    return PSP_NET_OK;
+}
+
+void psp_net_enet_disconnect_all(psp_net_enet *e, uint32_t reason) {
+    if (!e->is_host || !e->host) return;
+    for (int i = 0; i < e->max_slots; i++) {
+        slot *s = &e->slots[i];
+        if (!s->peer) continue;
+        if (s->welcomed && e->cfg.on_peer) e->cfg.on_peer(e->cfg.host_user, s->id, s->mac, 0);
+        enet_peer_disconnect(s->peer, reason);
+        memset(s, 0, sizeof *s);
+    }
+    enet_host_flush(e->host);
+}
+
+int psp_net_enet_peer_address(const psp_net_enet *e, uint64_t id, char *out, size_t cap) {
+    const slot *s = e->is_host ? slot_by_id(e, id) : NULL;
+    if (!s || !cap) return PSP_NET_ERR_NO_PEER;
+    char ip[64];
+    if (enet_address_get_host_ip(&s->peer->address, ip, sizeof ip) != 0) return PSP_NET_ERR;
+    snprintf(out, cap, "%s:%u", ip, (unsigned)s->peer->address.port);
+    return PSP_NET_OK;
+}
+
+uint32_t psp_net_enet_disconnect_reason(const psp_net_enet *e) { return e->disc_reason; }
 
 int psp_net_enet_peer_count(const psp_net_enet *e) {
     int n = 0;

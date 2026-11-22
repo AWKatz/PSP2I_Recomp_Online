@@ -110,7 +110,7 @@ static void report(const char *dir, const rx_state *s) {
 
 int main(void) {
     const uint8_t mac_h[6] = { 0x02, 0, 0, 0, 0, 0x01 }, mac_a[6] = { 0x02, 0, 0, 0, 0, 0x0A }, mac_b[6] = { 0x02, 0, 0, 0, 0, 0x0B };
-    psp_net_enet_config hc = { "127.0.0.1", 0, 0, NULL, NULL, NULL };
+    psp_net_enet_config hc = { .bind_host = "127.0.0.1" };
     psp_net_enet *h = psp_net_enet_create(&hc);
     g_host_for_echo = h;
     rx_state sh = { 0 }, sa = { 0 }, sb = { 0 };
@@ -118,7 +118,7 @@ int main(void) {
     rx_state *st[3] = { &sh, &sa, &sb };
     /* the clients service the host while they wait to be welcomed (one thread) */
     host_pump_ctx hp = { all, st };
-    psp_net_enet_config cc = { NULL, 0, 2000, NULL, pump_host_only, &hp };
+    psp_net_enet_config cc = { .connect_timeout_ms = 2000, .idle = pump_host_only, .idle_user = &hp };
     psp_net_enet *a = psp_net_enet_create(&cc), *b = psp_net_enet_create(&cc);
     all[1] = a; all[2] = b;
     const psp_net_transport *th = psp_net_enet_transport(h), *ta = psp_net_enet_transport(a), *tb = psp_net_enet_transport(b);

@@ -31,6 +31,17 @@ typedef struct {
      * lives in the same thread (a LAN game hosting and playing in one process) */
     void      (*idle)(void *user);
     void       *idle_user;
+
+    /* Host only, all optional (a dedicated server's policy hooks): */
+    /* a peer was welcomed (joined = 1, after its HELLO) or left (joined = 0) */
+    void      (*on_peer)(void *user, uint64_t id, const uint8_t mac[6], int joined);
+    /* every data packet a peer sends, before delivery or relay; return 0 to
+     * drop it (rate limiting) */
+    int       (*admit)(void *user, uint64_t id, uint32_t len);
+    void       *host_user;
+    /* relay only between peers marked with psp_net_enet_authorize (packets
+     * from the others still reach the host itself, e.g. their handshake) */
+    int         relay_authorized_only;
 } psp_net_enet_config;
 
 psp_net_enet *psp_net_enet_create(const psp_net_enet_config *cfg);   /* NULL cfg = defaults */
@@ -44,6 +55,18 @@ uint16_t psp_net_enet_port(const psp_net_enet *e);
 uint64_t psp_net_enet_self_id(const psp_net_enet *e);
 /* Connected, welcomed peers (host: clients; client: 1 once joined). */
 int      psp_net_enet_peer_count(const psp_net_enet *e);
+
+/* Host: let a peer's packets be relayed (relay_authorized_only). */
+int      psp_net_enet_authorize(psp_net_enet *e, uint64_t id, int on);
+/* Host: disconnect a peer; `reason` reaches the client (PSP_MMO_DISC_*). */
+int      psp_net_enet_disconnect(psp_net_enet *e, uint64_t id, uint32_t reason);
+/* Host: disconnect every peer at once (shutdown): anything still queued for
+ * them is dropped, so the notice goes out now. */
+void     psp_net_enet_disconnect_all(psp_net_enet *e, uint32_t reason);
+/* Host: a peer's address as "ip:port". 0 on success. */
+int      psp_net_enet_peer_address(const psp_net_enet *e, uint64_t id, char *out, size_t cap);
+/* Client: the reason the host gave when it disconnected us (0 = none / still joined). */
+uint32_t psp_net_enet_disconnect_reason(const psp_net_enet *e);
 
 #ifdef __cplusplus
 }

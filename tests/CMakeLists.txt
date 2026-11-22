@@ -73,6 +73,10 @@ if(ENABLE_MMO_NET)
     target_link_libraries(test_mmo_handshake PRIVATE psprecomp)
     add_test(NAME mmo_handshake COMMAND test_mmo_handshake)
 
+    add_executable(test_net_policy test_net_policy.c)   # psprecomp_net alone, as the server links it
+    target_link_libraries(test_net_policy PRIVATE psprecomp_net)
+    add_test(NAME net_policy COMMAND test_net_policy)
+
     # not a test: a stand-in server that prints client handshakes (Task 1.3 check)
     add_executable(mmo_listen mmo_listen.c)
     target_link_libraries(mmo_listen PRIVATE psprecomp)

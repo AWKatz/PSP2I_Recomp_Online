@@ -66,9 +66,11 @@ target_include_directories(psprecomp PUBLIC
 
 # Multiplayer (MMO) networking: the ad hoc transport seam. Off by default, so
 # the single-player runtime is built from exactly the sources above. A game
-# repo passes -DENABLE_MMO_NET=ON; the option is shared through the cache.
+# repo passes -DENABLE_MMO_NET=ON (the client) or -DBUILD_DEDICATED_SERVER=ON
+# (a headless server, which links only psprecomp_net: no game runtime).
 option(ENABLE_MMO_NET "Build the MMO network transport layer" OFF)
-if(ENABLE_MMO_NET)
+option(BUILD_DEDICATED_SERVER "Build the network library for a dedicated server" OFF)
+if(ENABLE_MMO_NET OR BUILD_DEDICATED_SERVER)
     # ENet (MIT), built from source and linked statically: no runtime dependency.
     include(FetchContent)
     FetchContent_Declare(enet
@@ -84,9 +86,20 @@ if(ENABLE_MMO_NET)
         target_compile_options(enet PRIVATE -w)   # third-party: not our warnings
     endif()
 
-    target_sources(psprecomp PRIVATE src/net/transport.c src/net/enet_transport.c src/net/adhoc_mmo.c src/net/toml_lite.c)
+    # The transport, the control protocol's helpers, LAN discovery, the
+    # config reader: shared by the MMO client and the dedicated server.
+    add_library(psprecomp_net STATIC src/net/transport.c src/net/enet_transport.c
+        src/net/lan_discovery.c src/net/toml_lite.c)
+    target_include_directories(psprecomp_net PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(psprecomp_net PUBLIC enet)
+    if(WIN32)
+        target_link_libraries(psprecomp_net PUBLIC ws2_32)
+    endif()
+endif()
+if(ENABLE_MMO_NET)
+    target_sources(psprecomp PRIVATE src/net/adhoc_mmo.c)
     target_compile_definitions(psprecomp PUBLIC PSPRECOMP_MMO_NET=1)
-    target_link_libraries(psprecomp PUBLIC enet)
+    target_link_libraries(psprecomp PUBLIC psprecomp_net)
 endif()
 
 # Networking HLE (src/hle/net.c) uses the host's sockets and adapter list.

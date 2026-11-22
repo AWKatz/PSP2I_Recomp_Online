@@ -60,7 +60,7 @@ int main(void) {
     psp_net_set_log(log_line);
 
     /* the server, on a free port */
-    psp_net_enet_config sc = { "127.0.0.1", 0, 0, NULL, NULL, NULL };
+    psp_net_enet_config sc = { .bind_host = "127.0.0.1" };
     g_srv = psp_net_enet_create(&sc);
     const psp_net_transport *st = psp_net_enet_transport(g_srv);
     const uint8_t srv_mac[6] = { 0x02, 0x50, 0x32, 0x49, 0, 1 };
@@ -69,7 +69,7 @@ int main(void) {
 
     /* the client, as mmo_client_init sets it up (the idle hook services the
      * in-process server while the join waits) */
-    psp_net_enet_config cc = { NULL, 0, 2000, NULL, srv_pump, NULL };
+    psp_net_enet_config cc = { .connect_timeout_ms = 2000, .idle = srv_pump };
     psp_net_enet *cli = psp_net_enet_create(&cc);
     psp_net_set_transport(psp_net_enet_transport(cli));
     psp_net_mmo_config mc = { server, "Tester", "test" };
