@@ -21,8 +21,11 @@
 #define TICK_HZ 30
 #define TICK_NS (1000000000ull / TICK_HZ)
 
-static volatile sig_atomic_t g_quit;
+static volatile sig_atomic_t g_quit, g_reload;
 static void on_signal(int sig) { (void)sig; g_quit = 1; }
+#ifdef SIGHUP
+static void on_hup(int sig) { (void)sig; g_reload = 1; }
+#endif
 
 static void log_line(const char *line) {
     char ts[32];
@@ -62,6 +65,11 @@ static void usage(void) {
          "  --stats S              print a status line every S seconds (default 60, 0 = off)\n"
          "  --run-seconds S        exit after S seconds (tests, measurements)\n"
          "  --db PATH              the database (default psp2i_server.db; SQLite, WAL)\n"
+         "  --drop-tables PATH     loot tables, JSON (default config/drop_tables.json; reloaded on change)\n"
+         "  --rates PATH           rate multipliers, TOML (default config/rates.toml; reloaded on change)\n"
+         "  --kill-limit N         enemy kill reports per second per player (default 10)\n"
+         "\n"
+         "SIGHUP reloads the drop tables and rates at once.\n"
          "  --help");
 }
 
@@ -85,6 +93,8 @@ int main(int argc, char **argv) {
     int mode_set = 0;
     long stats_s = 60, run_s = 0;
     const char *db_path = "psp2i_server.db";
+    cfg.drop_tables_path = "config/drop_tables.json";
+    cfg.rates_path = "config/rates.toml";
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (!strcmp(a, "--lan") || !strcmp(a, "--online")) {
@@ -103,6 +113,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--stats")) { i = need(i, argc, a); stats_s = num(argv[i], a, 0, 86400); }
         else if (!strcmp(a, "--run-seconds")) { i = need(i, argc, a); run_s = num(argv[i], a, 1, 31536000); }
         else if (!strcmp(a, "--db")) { i = need(i, argc, a); db_path = argv[i]; }
+        else if (!strcmp(a, "--drop-tables")) { i = need(i, argc, a); cfg.drop_tables_path = argv[i]; }
+        else if (!strcmp(a, "--rates")) { i = need(i, argc, a); cfg.rates_path = argv[i]; }
+        else if (!strcmp(a, "--kill-limit")) { i = need(i, argc, a); cfg.kills_per_sec = (uint32_t)num(argv[i], a, 1, 1000); }
         else if (!strcmp(a, "--help") || !strcmp(a, "-h")) { usage(); return 0; }
         else { fprintf(stderr, "psp2i_server: unknown option '%s' (see --help)\n", a); return 2; }
     }
@@ -113,6 +126,9 @@ int main(int argc, char **argv) {
 
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
+#ifdef SIGHUP
+    signal(SIGHUP, on_hup);
+#endif
 
     char err[512];
     db *database = db_open(db_path, log_line, err, sizeof err);
@@ -129,6 +145,7 @@ int main(int argc, char **argv) {
               db_path, sqlite3_libversion(), DB_SCHEMA_VERSION, acc, chr, items);
     }
 
+    cfg.database = database;
     srv *s = srv_create(&cfg);
     if (!s || srv_start(s) != 0) { srv_destroy(s); db_close(database); return 1; }
 
@@ -138,6 +155,7 @@ int main(int argc, char **argv) {
     uint64_t stat_t = t0, stat_cpu = clk_cpu_ns(), stat_ticks = 0;
     while (!g_quit) {
         const uint64_t start = clk_now_ns();
+        if (g_reload) { g_reload = 0; srv_reload(s); }
         srv_tick(s, start / 1000000u);
         const uint64_t done = clk_now_ns(), work = done - start;
         ticks++;
@@ -160,12 +178,13 @@ int main(int argc, char **argv) {
             const uint64_t cpu = clk_cpu_ns();
             const double secs = (double)(done - stat_t) / 1e9;
             logf_("status: %d players, %d pending | %.1f Hz, tick work avg %.3f ms max %.3f ms, %llu late | "
-                  "cpu %.2f%% | rss %.1f MB | in %llu, dropped %llu, lan replies %llu",
+                  "cpu %.2f%% | rss %.1f MB | in %llu, dropped %llu, lan replies %llu | kills %llu, drops %llu (rare %llu)",
                   st.players, st.pending, (double)(ticks - stat_ticks) / secs,
                   (double)work_sum / (double)ticks / 1e6, (double)work_max / 1e6, (unsigned long long)late,
                   (double)(cpu - stat_cpu) / 1e9 / secs * 100.0, (double)clk_rss_bytes() / 1048576.0,
                   (unsigned long long)st.packets_in, (unsigned long long)st.packets_dropped,
-                  (unsigned long long)st.lan_replies);
+                  (unsigned long long)st.lan_replies, (unsigned long long)st.kills, (unsigned long long)st.drops,
+                  (unsigned long long)st.rare_drops);
             stat_t = done; stat_cpu = cpu; stat_ticks = ticks;
         }
         clk_sleep_until_ns(next);

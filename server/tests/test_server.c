@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static int fails;
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); fails++; } } while (0)
@@ -64,6 +65,8 @@ typedef struct {
     uint32_t status;
     uint64_t session;
     int game_rx;
+    int rewards, drops;
+    uint32_t last_exp, last_item, last_flags;
 } client;
 
 static void cl_rx(const psp_net_packet *p, void *u) {
@@ -72,6 +75,13 @@ static void cl_rx(const psp_net_packet *p, void *u) {
         c->acked = 1;
         c->status = psp_mmo_get_u32(p->data + PSP_MMO_HDR_LEN);
         c->session = (uint64_t)psp_mmo_get_u32(p->data + PSP_MMO_HDR_LEN + 4) | ((uint64_t)psp_mmo_get_u32(p->data + PSP_MMO_HDR_LEN + 8) << 32);
+    } else if (p->port == PSP_MMO_CTRL_PORT && psp_mmo_type(p->data, p->len) == MSG_S2C_KILL_REWARD && p->len == PSP_MMO_KILL_REWARD_LEN) {
+        c->rewards++;
+        c->last_exp = psp_mmo_get_u32(p->data + 12);
+    } else if (p->port == PSP_MMO_CTRL_PORT && psp_mmo_type(p->data, p->len) == MSG_S2C_SPAWN_DROP && p->len == PSP_MMO_SPAWN_DROP_LEN) {
+        c->drops++;
+        c->last_item = psp_mmo_get_u32(p->data + 20);
+        c->last_flags = psp_mmo_get_u32(p->data + 28);
     } else if (p->port != PSP_MMO_CTRL_PORT) {
         c->game_rx++;
     }
@@ -115,6 +125,18 @@ static void cl_broadcast(client *c) {
 static uint32_t cl_wait_disc(client *c, unsigned ms) {
     for (unsigned i = 0; i < ms / 10 && !psp_net_enet_disconnect_reason(c->e); i++) cl_pump(c, 10);
     return psp_net_enet_disconnect_reason(c->e);
+}
+static void cl_kill(client *c, uint32_t enemy) {
+    uint8_t k[PSP_MMO_ENEMY_KILLED_LEN] = { 0 };
+    psp_mmo_put_hdr(k, MSG_C2S_ENEMY_KILLED);
+    psp_mmo_put_u32(k + 8, enemy);
+    const psp_net_transport *t = psp_net_enet_transport(c->e);
+    const psp_net_peer host = { { 0 }, 1 };
+    t->send_packet(t->ctx, &host, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, k, sizeof k);
+}
+static void write_file(const char *path, const char *text) {
+    FILE *f = fopen(path, "wb");
+    if (f) { fputs(text, f); fclose(f); }
 }
 static void cl_free(client *c) { psp_net_enet_destroy(c->e); c->e = NULL; }
 
@@ -202,6 +224,65 @@ int main(void) {
     cl_free(&a);
     cl_free(&b);
     srv_destroy(lt.s);
+
+    /* ---- loot: kills, drops, hot reload ---- */
+    {
+        char dpath[256], rpath[256];
+        snprintf(dpath, sizeof dpath, "%s/psp2i_drops_%d.json", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp", (int)getpid());
+        snprintf(rpath, sizeof rpath, "%s/psp2i_rates_%d.toml", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp", (int)getpid());
+        write_file(dpath, "{\"enemies\":[{\"id\":5,\"exp\":10,\"drop_chance\":1,\"items\":[{\"id\":111,\"weight\":1}]}]}");
+        write_file(rpath, "exp_rate = 1.0\n");
+        srv_config kc = lc;
+        kc.drop_tables_path = dpath;
+        kc.rates_path = rpath;
+        kc.kills_per_sec = 5;
+        kc.rng_seed = 99;
+        kc.handshake_timeout_ms = 5000;
+        srv_thread kt;
+        srv_go(&kt, &kc);
+        client k1, k2;
+        CHECK(cl_join(&k1, srv_port(kt.s), 0x11) && cl_join(&k2, srv_port(kt.s), 0x12));
+        cl_handshake(&k1, 0x11, "Killer");
+        cl_handshake(&k2, 0x12, "Watcher");
+        cl_kill(&k1, 5);
+        cl_pump(&k1, 200); cl_pump(&k2, 100);
+        CHECK(k1.rewards == 1 && k1.last_exp == 10 && k1.drops == 1 && k1.last_item == 111);
+        CHECK(k2.drops == 1 && k2.rewards == 0);                       /* everyone sees the drop; only the killer the reward */
+        cl_kill(&k1, 404);                                             /* not in the table: nothing */
+        cl_pump(&k1, 150);
+        CHECK(k1.rewards == 1 && k1.drops == 1);
+
+        /* hot reload: new item and a rare, 3x exp -- nobody disconnected */
+        write_file(dpath, "{\"enemies\":[{\"id\":5,\"exp\":10,\"rares\":[{\"id\":222,\"chance\":1}]}]}");
+        write_file(rpath, "exp_rate = 3.0\nrare_drop_rate = 1.0\n");
+        for (int i = 0; i < 160; i++) { cl_pump(&k1, 5); cl_pump(&k2, 5); }   /* ~1.6 s: the once-a-second check */
+        cl_kill(&k1, 5);
+        cl_pump(&k1, 200); cl_pump(&k2, 100);
+        CHECK(k1.rewards == 2 && k1.last_exp == 30 && k1.last_item == 222 && (k1.last_flags & PSP_MMO_DROP_RARE));
+        CHECK(psp_net_enet_disconnect_reason(k1.e) == 0 && psp_net_enet_disconnect_reason(k2.e) == 0);
+
+        /* a broken file: the old tables stay */
+        write_file(dpath, "{\"enemies\":[{\"id\":5,,}]}");
+        for (int i = 0; i < 160; i++) { cl_pump(&k1, 5); cl_pump(&k2, 5); }
+        cl_kill(&k1, 5);
+        cl_pump(&k1, 200);
+        CHECK(k1.rewards == 3 && k1.last_item == 222);
+
+        /* kill reports are rate limited (5/s, burst 10) */
+        for (int i = 0; i < 40; i++) cl_kill(&k1, 5);
+        cl_pump(&k1, 300);
+        CHECK(k1.rewards < 3 + 15 && k1.rewards > 3 + 5);
+        CHECK(psp_net_enet_disconnect_reason(k1.e) == 0);
+
+        srv_halt(&kt, &st);
+        CHECK(st.reloads >= 4 && st.reload_errors == 1 && st.kills_dropped >= 20 && st.rare_drops >= 1);
+        CHECK(srv_set_rate(kt.s, "drop_rate", 2.5) == 0 && srv_rates(kt.s).drop == 2.5 && srv_set_rate(kt.s, "nope", 1) == -1);
+        srv_destroy(kt.s);
+        cl_free(&k1);
+        cl_free(&k2);
+        remove(dpath);
+        remove(rpath);
+    }
 
     /* ---- online mode ---- */
     srv_config oc = { .mode = SRV_MODE_ONLINE, .bind = "127.0.0.1", .port = 0, .max_players = 8, .rate_pps = 20,

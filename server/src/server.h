@@ -8,6 +8,10 @@
 
 #include <stdint.h>
 
+#include "loot.h"
+
+typedef struct db db;
+
 typedef enum { SRV_MODE_LAN, SRV_MODE_ONLINE } srv_mode;
 
 typedef struct {
@@ -20,6 +24,12 @@ typedef struct {
     uint32_t    rate_pps;             /* online: packets per second per player (burst 2x) */
     uint32_t    handshake_timeout_ms; /* a peer must send a valid handshake within this */
     void      (*log)(const char *line);
+    /* loot (Task 2.3), all optional */
+    db         *database;             /* drops are recorded here (else numbered in memory) */
+    const char *drop_tables_path;     /* JSON; reloaded when its contents change */
+    const char *rates_path;           /* TOML; reloaded when its contents change */
+    uint32_t    kills_per_sec;        /* per player (burst 2x; default 10) */
+    uint64_t    rng_seed;             /* 0 = from the OS */
 } srv_config;
 
 typedef struct {
@@ -29,6 +39,7 @@ typedef struct {
     uint64_t kicked_timeout, kicked_rate, kicked_protocol;
     uint64_t packets_in, packets_dropped;
     uint64_t lan_replies;
+    uint64_t kills, kills_dropped, drops, rare_drops, reloads, reload_errors;
 } srv_stats;
 
 typedef struct srv srv;
@@ -47,6 +58,13 @@ void     srv_get_stats(const srv *s, srv_stats *out);
 uint16_t srv_port(const srv *s);
 uint16_t srv_lan_port(const srv *s);    /* 0 outside LAN mode */
 uint32_t srv_version_hash(void);
+
+/* Loot: check both config files now (otherwise once a second). */
+void       srv_reload(srv *s);
+loot_rates srv_rates(const srv *s);
+/* Live, in memory (the admin tools); -1 for an unknown name or bad value. */
+int        srv_set_rate(srv *s, const char *name, double value);
+int        srv_enemy_count(const srv *s);
 
 /* The handshake check, on its own (tests): PSP_MMO_OK or PSP_MMO_ERR_*.
  * On PSP_MMO_OK, name (33 bytes) and mac are filled in. */

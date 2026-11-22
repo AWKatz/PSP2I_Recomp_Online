@@ -2,6 +2,8 @@
 #include "server.h"
 
 #include "clock.h"
+#include "crypto.h"
+#include "db.h"
 
 #include <psprecomp/net_enet.h>
 #include <psprecomp/net_lan.h>
@@ -27,6 +29,7 @@ typedef struct {
     uint32_t dropped_this_second;
     int      bad_seconds;             /* consecutive seconds with drops */
     uint32_t kick;                    /* PSP_MMO_DISC_* to apply after this poll (0 = none) */
+    double   kill_tokens;             /* enemy kill reports: token bucket */
 } session;
 
 struct srv {
@@ -38,6 +41,12 @@ struct srv {
     srv_stats  st;
     uint64_t   now_ms, last_refill_ms, second_start_ms;
     int        started;
+    /* loot */
+    loot_table *loot;
+    loot_rates  rates;
+    loot_rng    rng;
+    uint64_t    drops_sig, rates_sig;  /* content signatures of the config files (0 = missing) */
+    uint64_t    next_drop_id;
 };
 
 static void slog(srv *s, const char *fmt, ...) {
@@ -147,6 +156,7 @@ static void on_peer(void *u, uint64_t id, const uint8_t mac[6], int joined) {
         ss->id = id;
         ss->joined_ms = s->now_ms;
         ss->tokens = 2.0 * s->cfg.rate_pps;
+        ss->kill_tokens = 2.0 * s->cfg.kills_per_sec;
         return;
     }
     session *ss = find(s, id);
@@ -168,6 +178,120 @@ static int admit(void *u, uint64_t id, uint32_t len) {
     return 0;
 }
 
+/* ---- loot ---------------------------------------------------------------------------- */
+
+static uint64_t file_sig(const char *path) {
+    if (!path) return 0;
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    uint64_t h = 0xCBF29CE484222325ull, n = 0;   /* FNV-1a 64 of the contents, and the length */
+    int c;
+    while ((c = fgetc(f)) != EOF) { h = (h ^ (uint8_t)c) * 0x100000001B3ull; n++; }
+    fclose(f);
+    return (h ^ n) | 1;
+}
+
+static void check_configs(srv *s, int force) {
+    char err[320];
+    const uint64_t ds = file_sig(s->cfg.drop_tables_path);
+    if (s->cfg.drop_tables_path && (force || ds != s->drops_sig)) {
+        s->drops_sig = ds;
+        loot_table *t = ds ? loot_load(s->cfg.drop_tables_path, err, sizeof err) : NULL;
+        if (t) {
+            loot_free(s->loot);                       /* single-threaded: swap between ticks */
+            s->loot = t;
+            s->st.reloads++;
+            slog(s, "drop tables: %s: %d enemies, %d missions (version %d)", s->cfg.drop_tables_path,
+                 t->n_enemies, t->n_missions, t->version);
+        } else {
+            s->st.reload_errors++;
+            slog(s, "drop tables: %s; %s", ds ? err : "file missing",
+                 s->loot ? "keeping the tables loaded before" : "no drops until it loads");
+        }
+    }
+    const uint64_t rs = file_sig(s->cfg.rates_path);
+    if (s->cfg.rates_path && (force || rs != s->rates_sig)) {
+        s->rates_sig = rs;
+        loot_rates r;
+        const int rc = rs ? loot_rates_load(s->cfg.rates_path, &r, err, sizeof err) : -2;
+        if (rc == 0) {
+            s->rates = r;
+            s->st.reloads++;
+            slog(s, "rates: exp %.2f, drop %.2f, rare %.2f, meseta %.2f, type points %.2f", r.exp, r.drop, r.rare, r.meseta, r.type_points);
+        } else if (rc == -2) {
+            slog(s, "rates: %s missing; keeping %s", s->cfg.rates_path, s->st.reloads ? "the current rates" : "1.0 for all");
+        } else {
+            s->st.reload_errors++;
+            slog(s, "rates: %s; keeping the current rates", err);
+        }
+    }
+}
+
+static void put_f32(uint8_t *b, const uint8_t *src) { memcpy(b, src, 4); }   /* floats pass through as sent */
+
+static void on_kill(srv *s, session *ss, const psp_net_packet *p) {
+    if (p->len != PSP_MMO_ENEMY_KILLED_LEN) return;
+    if (ss->kill_tokens < 1.0) { s->st.kills_dropped++; return; }
+    ss->kill_tokens -= 1.0;
+    const uint8_t *m = p->data + PSP_MMO_HDR_LEN;
+    const uint32_t enemy = psp_mmo_get_u32(m);
+    loot_result r;
+    if (!s->loot || loot_roll_enemy(s->loot, enemy, &s->rates, &s->rng, &r) != 0) {
+        s->st.kills_dropped++;
+        return;
+    }
+    s->st.kills++;
+    const psp_net_transport *t = psp_net_enet_transport(s->enet);
+    uint8_t rw[PSP_MMO_KILL_REWARD_LEN];
+    psp_mmo_put_hdr(rw, MSG_S2C_KILL_REWARD);
+    psp_mmo_put_u32(rw + 8, enemy);
+    psp_mmo_put_u32(rw + 12, r.exp);
+    psp_mmo_put_u32(rw + 16, r.type_points);
+    const psp_net_peer killer = { { 0 }, ss->id };
+    t->send_packet(t->ctx, &killer, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, rw, sizeof rw);
+    if (!r.has_drop) return;
+
+    /* the drop: recorded (claims come later), then shown to every player */
+    int64_t drop_id = 0;
+    if (s->cfg.database) {
+        char item[160];
+        if (r.item_id) snprintf(item, sizeof item, "{\"id\":%u,\"rare\":%s}", (unsigned)r.item_id, r.rare ? "true" : "false");
+        else snprintf(item, sizeof item, "{\"meseta\":%u}", (unsigned)r.meseta);
+        char origin[64];
+        snprintf(origin, sizeof origin, "enemy:%u", (unsigned)enemy);
+        drop_id = db_drop_create(s->cfg.database, item, origin);
+    }
+    if (drop_id <= 0) drop_id = (int64_t)++s->next_drop_id;
+    uint8_t sd[PSP_MMO_SPAWN_DROP_LEN];
+    psp_mmo_put_hdr(sd, MSG_S2C_SPAWN_DROP);
+    for (int i = 0; i < 8; i++) sd[8 + i] = (uint8_t)((uint64_t)drop_id >> (8 * i));
+    psp_mmo_put_u32(sd + 16, enemy);
+    psp_mmo_put_u32(sd + 20, r.item_id);
+    psp_mmo_put_u32(sd + 24, r.meseta);
+    psp_mmo_put_u32(sd + 28, r.rare ? PSP_MMO_DROP_RARE : 0);
+    put_f32(sd + 32, m + 8); put_f32(sd + 36, m + 12); put_f32(sd + 40, m + 16);
+    for (int i = 0; i < 8; i++) sd[44 + i] = (uint8_t)(ss->id >> (8 * i));
+    for (int i = 0; i < MAX_SESSIONS; i++) {
+        if (s->sess[i].state != SS_ACTIVE) continue;
+        const psp_net_peer to = { { 0 }, s->sess[i].id };
+        t->send_packet(t->ctx, &to, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, sd, sizeof sd);
+    }
+    s->st.drops++;
+    if (r.rare) {
+        s->st.rare_drops++;
+        slog(s, "rare drop: '%s' (item %u) from enemy %u for '%s'", r.name, (unsigned)r.item_id, (unsigned)enemy, ss->name);
+    }
+}
+
+void srv_reload(srv *s) { check_configs(s, 1); }
+loot_rates srv_rates(const srv *s) { return s->rates; }
+int srv_set_rate(srv *s, const char *name, double v) {
+    if (loot_rates_set(&s->rates, name, v) != 0) return -1;
+    slog(s, "rates: %s set to %.2f", name, v);
+    return 0;
+}
+int srv_enemy_count(const srv *s) { return s->loot ? s->loot->n_enemies : 0; }
+
 static void on_packet(const psp_net_packet *p, void *u) {
     srv *s = u;
     session *ss = find(s, p->from.id);
@@ -181,8 +305,9 @@ static void on_packet(const psp_net_packet *p, void *u) {
         }
         return;
     }
-    /* Active players: game traffic is relayed by the transport; the control
-     * messages of later phases are handled here. */
+    /* Active players: game traffic is relayed by the transport; control
+     * messages are handled here. */
+    if (type == MSG_C2S_ENEMY_KILLED) on_kill(s, ss, p);
 }
 
 /* ---- lifecycle ---------------------------------------------------------------------- */
@@ -197,6 +322,12 @@ srv *srv_create(const srv_config *cfg) {
     if (!s->cfg.handshake_timeout_ms) s->cfg.handshake_timeout_ms = 5000;
     snprintf(s->name, sizeof s->name, "%s", s->cfg.name && *s->cfg.name ? s->cfg.name : "PSP2i Server");
     s->cfg.name = s->name;
+    if (!s->cfg.kills_per_sec) s->cfg.kills_per_sec = 10;
+    const loot_rates def = LOOT_RATES_DEFAULT;
+    s->rates = def;
+    uint64_t seed = s->cfg.rng_seed;
+    if (!seed && os_random(&seed, sizeof seed) != 0) seed = 0x5053503249ull ^ (uint64_t)(uintptr_t)s;
+    loot_rng_seed(&s->rng, seed);
     return s;
 }
 
@@ -227,6 +358,7 @@ int srv_start(srv *s) {
         }
     }
     s->started = 1;
+    check_configs(s, 1);
     if (s->lan)
         slog(s, "'%s': LAN mode, game port %u (udp), discovery port %u (udp), up to %d players, version %s (hash %08X)",
              s->name, (unsigned)srv_port(s), (unsigned)srv_lan_port(s), s->cfg.max_players,
@@ -260,6 +392,8 @@ void srv_tick(srv *s, uint64_t now_ms) {
         if (ss->state == SS_FREE) continue;
         ss->tokens += dt * s->cfg.rate_pps;
         if (ss->tokens > 2.0 * s->cfg.rate_pps) ss->tokens = 2.0 * s->cfg.rate_pps;
+        ss->kill_tokens += dt * s->cfg.kills_per_sec;
+        if (ss->kill_tokens > 2.0 * s->cfg.kills_per_sec) ss->kill_tokens = 2.0 * s->cfg.kills_per_sec;
     }
 
     const psp_net_transport *t = psp_net_enet_transport(s->enet);
@@ -267,7 +401,7 @@ void srv_tick(srv *s, uint64_t now_ms) {
 
     /* once a second: rate-limit verdicts */
     const int new_second = now_ms - s->second_start_ms >= 1000;
-    if (new_second) s->second_start_ms = now_ms;
+    if (new_second) { s->second_start_ms = now_ms; check_configs(s, 0); }   /* hot reload */
 
     for (int i = 0; i < MAX_SESSIONS; i++) {
         session *ss = &s->sess[i];
@@ -320,6 +454,7 @@ void srv_stop(srv *s) {
 void srv_destroy(srv *s) {
     if (!s) return;
     srv_stop(s);
+    loot_free(s->loot);
     free(s);
 }
 

@@ -1,0 +1,7 @@
+# psp2i_server live rate multipliers (0..100). Edit and save: the server
+# reloads this within a second, without disconnecting anyone.
+exp_rate         = 1.0
+drop_rate        = 1.0
+rare_drop_rate   = 1.0
+meseta_rate      = 1.0
+type_points_rate = 1.0

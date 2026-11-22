@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "comment": "PLACEHOLDER data for the server-side loot system (Task 2.3). Enemy, item and mission ids, names and chances are invented until PSP2i's real tables are extracted from the game data. Edit and save: the server reloads it within a second.",
+  "enemies": [
+    { "id": 1, "name": "Booma", "exp": 12, "type_points": 2, "drop_chance": 0.30, "meseta": [5, 20],
+      "items": [ { "id": 4097, "name": "Saber", "weight": 25 },
+                 { "id": 8193, "name": "Monomate", "weight": 35 },
+                 { "meseta": true, "weight": 40 } ],
+      "rares": [ { "id": 4353, "name": "Booma Claw", "chance": 0.002 } ] },
+    { "id": 2, "name": "Gobooma", "exp": 18, "type_points": 3, "drop_chance": 0.32, "meseta": [8, 30],
+      "items": [ { "id": 4098, "name": "Brand", "weight": 20 },
+                 { "id": 8194, "name": "Dimate", "weight": 30 },
+                 { "meseta": true, "weight": 50 } ],
+      "rares": [ { "id": 4354, "name": "Gobooma Fang", "chance": 0.0015 } ] },
+    { "id": 3, "name": "Jigobooma", "exp": 30, "type_points": 5, "drop_chance": 0.35, "meseta": [15, 45],
+      "items": [ { "id": 4099, "name": "Buster", "weight": 15 },
+                 { "id": 8195, "name": "Trimate", "weight": 25 },
+                 { "meseta": true, "weight": 60 } ],
+      "rares": [ { "id": 4355, "name": "Jigo Crusher", "chance": 0.001 },
+                 { "id": 4356, "name": "Red Ring", "chance": 0.0005 } ] },
+    { "id": 10, "name": "Kamatoze", "exp": 40, "type_points": 6, "drop_chance": 0.40, "meseta": [20, 60],
+      "items": [ { "id": 4610, "name": "Twin Daggers", "weight": 30 },
+                 { "id": 8196, "name": "Sol Atomizer", "weight": 10 },
+                 { "meseta": true, "weight": 60 } ],
+      "rares": [ { "id": 4611, "name": "Kamatoze Edge", "chance": 0.001 } ] },
+    { "id": 100, "name": "De Ragan", "exp": 900, "type_points": 60, "drop_chance": 1.0, "meseta": [500, 1500],
+      "items": [ { "id": 5121, "name": "Dragon Slayer", "weight": 10 },
+                 { "meseta": true, "weight": 90 } ],
+      "rares": [ { "id": 5122, "name": "Ragan Scale", "chance": 0.02 } ] }
+  ],
+  "missions": [
+    { "id": 1, "name": "Bring Down the Boomas", "meseta": [200, 400],
+      "rewards": [ { "id": 8193, "name": "Monomate", "weight": 60 },
+                   { "id": 8194, "name": "Dimate", "weight": 35 },
+                   { "id": 4097, "name": "Saber", "weight": 5 } ] },
+    { "id": 2, "name": "Dragon of the Plains", "meseta": [1500, 3000],
+      "rewards": [ { "id": 8195, "name": "Trimate", "weight": 80 },
+                   { "id": 5121, "name": "Dragon Slayer", "weight": 20 } ] }
+  ]
+}
