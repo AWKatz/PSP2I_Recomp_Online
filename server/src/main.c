@@ -7,6 +7,8 @@
  * upkeep and answers LAN probes, then sleeps to the next deadline. Ctrl-C or
  * SIGTERM shuts down cleanly. See --help. */
 #include "clock.h"
+#include "db.h"
+#include "sqlite3.h"
 #include "server.h"
 
 #include <signal.h>
@@ -59,6 +61,7 @@ static void usage(void) {
          "  --handshake-timeout S  seconds a new connection has to send its handshake (default 5)\n"
          "  --stats S              print a status line every S seconds (default 60, 0 = off)\n"
          "  --run-seconds S        exit after S seconds (tests, measurements)\n"
+         "  --db PATH              the database (default psp2i_server.db; SQLite, WAL)\n"
          "  --help");
 }
 
@@ -81,6 +84,7 @@ int main(int argc, char **argv) {
     srv_config cfg = { .mode = SRV_MODE_LAN, .port = 29001, .lan_port = 29000, .log = log_line };
     int mode_set = 0;
     long stats_s = 60, run_s = 0;
+    const char *db_path = "psp2i_server.db";
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (!strcmp(a, "--lan") || !strcmp(a, "--online")) {
@@ -98,6 +102,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--handshake-timeout")) { i = need(i, argc, a); cfg.handshake_timeout_ms = (uint32_t)num(argv[i], a, 1, 3600) * 1000u; }
         else if (!strcmp(a, "--stats")) { i = need(i, argc, a); stats_s = num(argv[i], a, 0, 86400); }
         else if (!strcmp(a, "--run-seconds")) { i = need(i, argc, a); run_s = num(argv[i], a, 1, 31536000); }
+        else if (!strcmp(a, "--db")) { i = need(i, argc, a); db_path = argv[i]; }
         else if (!strcmp(a, "--help") || !strcmp(a, "-h")) { usage(); return 0; }
         else { fprintf(stderr, "psp2i_server: unknown option '%s' (see --help)\n", a); return 2; }
     }
@@ -109,8 +114,23 @@ int main(int argc, char **argv) {
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
 
+    char err[512];
+    db *database = db_open(db_path, log_line, err, sizeof err);
+    if (!database) { logf_("database: %s", err); return 1; }
+    {
+        sqlite3_stmt *st;
+        long long acc = 0, chr = 0, items = 0;
+        if (sqlite3_prepare_v2(db_handle(database), "SELECT (SELECT count(*) FROM accounts), (SELECT count(*) FROM characters), "
+                               "(SELECT count(*) FROM item_ledger)", -1, &st, NULL) == SQLITE_OK && sqlite3_step(st) == SQLITE_ROW) {
+            acc = sqlite3_column_int64(st, 0); chr = sqlite3_column_int64(st, 1); items = sqlite3_column_int64(st, 2);
+        }
+        sqlite3_finalize(st);
+        logf_("database: %s (SQLite %s, WAL, schema v%d): %lld accounts, %lld characters, %lld items",
+              db_path, sqlite3_libversion(), DB_SCHEMA_VERSION, acc, chr, items);
+    }
+
     srv *s = srv_create(&cfg);
-    if (!s || srv_start(s) != 0) { srv_destroy(s); return 1; }
+    if (!s || srv_start(s) != 0) { srv_destroy(s); db_close(database); return 1; }
 
     /* the fixed-timestep loop */
     const uint64_t t0 = clk_now_ns();
@@ -158,5 +178,6 @@ int main(int argc, char **argv) {
           ticks ? (double)work_sum / (double)ticks / 1e6 : 0.0, (double)work_max / 1e6,
           (double)clk_cpu_ns() / 1e9 / up * 100.0, (double)clk_rss_bytes() / 1048576.0);
     srv_destroy(s);
+    db_close(database);                               /* checkpoints the WAL */
     return 0;
 }

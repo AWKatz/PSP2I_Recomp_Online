@@ -21,11 +21,30 @@ if(NOT TARGET psprecomp_net)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../psprecomp ${CMAKE_CURRENT_BINARY_DIR}/psprecomp EXCLUDE_FROM_ALL)
 endif()
 
-add_library(psp2i_server_core STATIC src/server.c src/clock.c)
+# SQLite (vendored amalgamation, public domain): WAL + JSON, no extension
+# loading (no dlopen), foreign keys on by default.
+add_library(psp2i_sqlite STATIC third_party/sqlite/sqlite3.c)
+target_include_directories(psp2i_sqlite PUBLIC third_party/sqlite)
+target_compile_definitions(psp2i_sqlite PUBLIC
+    SQLITE_THREADSAFE=1 SQLITE_ENABLE_JSON1 SQLITE_DQS=0 SQLITE_DEFAULT_FOREIGN_KEYS=1
+    SQLITE_OMIT_LOAD_EXTENSION SQLITE_DEFAULT_WAL_SYNCHRONOUS=2 SQLITE_LIKE_DOESNT_MATCH_BLOBS
+    SQLITE_OMIT_DEPRECATED SQLITE_OMIT_SHARED_CACHE)
+if(NOT MSVC)
+    target_compile_options(psp2i_sqlite PRIVATE -w)   # third-party: not our warnings
+endif()
+if(UNIX)
+    find_package(Threads REQUIRED)
+    target_link_libraries(psp2i_sqlite PUBLIC Threads::Threads)
+    if(NOT APPLE)
+        target_link_libraries(psp2i_sqlite PUBLIC m)
+    endif()
+endif()
+
+add_library(psp2i_server_core STATIC src/server.c src/clock.c src/db.c src/crypto.c)
 target_include_directories(psp2i_server_core PUBLIC src)
-target_link_libraries(psp2i_server_core PUBLIC psprecomp_net)
+target_link_libraries(psp2i_server_core PUBLIC psprecomp_net psp2i_sqlite)
 if(WIN32)
-    target_link_libraries(psp2i_server_core PUBLIC psapi winmm)
+    target_link_libraries(psp2i_server_core PUBLIC psapi winmm bcrypt)
 endif()
 if(NOT MSVC)
     target_compile_options(psp2i_server_core PRIVATE -Wall -Wextra)
@@ -47,3 +66,8 @@ enable_testing()
 add_executable(test_server EXCLUDE_FROM_ALL tests/test_server.c)
 target_link_libraries(test_server PRIVATE psp2i_server_core)
 add_test(NAME test_server COMMAND test_server)
+if(NOT WIN32)   # the interrupt tests fork and SIGKILL a child mid-transaction
+    add_executable(test_db EXCLUDE_FROM_ALL tests/test_db.c)
+    target_link_libraries(test_db PRIVATE psp2i_server_core)
+    add_test(NAME test_db COMMAND test_db)
+endif()

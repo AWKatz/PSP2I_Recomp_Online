@@ -42,6 +42,20 @@ The tick runs at a fixed 30 Hz (33.33 ms): read the network, run session upkeep,
 
 Every `--stats` seconds the server logs a status line: tick rate, tick work time, CPU, RSS and packet counts. It logs a summary on exit as well. Ctrl-C or SIGTERM shuts the server down and tells every client (`DISC_SHUTDOWN`).
 
+## Database
+
+The server keeps its data in `--db PATH` (default `psp2i_server.db`), an embedded SQLite 3.54.1 database. It runs in WAL mode, so the game loop can write while the admin dashboard reads, with `synchronous=FULL` and foreign keys on. The schema is in `src/db.c` (`PRAGMA user_version` 1).
+
+The tables pair plain columns with JSON:
+
+- **`accounts`:** login names, PBKDF2-SHA256 password hashes (100,000 iterations, salted), admin flag, bans (reason and expiry), and the last IP.
+- **`characters`:** plain columns for name, level, race, class and Meseta (never negative). JSON columns for appearance, inventory (always an array) and partner cards.
+- **`audit_logs`:** every admin action, with JSON details.
+- **`item_ledger`:** one row for every item the server has ever issued. Its `uid` is stamped into the item's JSON in the inventory.
+- **`drops`:** items waiting on the field. The first claim wins.
+
+Trades, Meseta transfers and drop claims each run as one `BEGIN IMMEDIATE` transaction (`db_trade`, `db_meseta_transfer`, `db_drop_claim`). A crash at any point leaves the database either before or after the whole move. Each item's `uid` makes that checkable: every ledger `uid` must appear in exactly one inventory.
+
 ## Clients
 
 With `lan_discovery = true` and no `server_ip` in `client_config.toml`, an MMO-build client broadcasts a probe. It then joins the first server that answers with the same version hash (`PSP_MMO_VERSION_STRING`).
@@ -49,13 +63,14 @@ With `lan_discovery = true` and no `server_ip` in `client_config.toml`, an MMO-b
 ## Tests
 
 - `cmake --build server/build --target test_server && server/build/test_server` runs the server on its own thread at 30 Hz against real ENet clients. It covers the handshake checks, LAN discovery, relay gating, and the timeout, protocol, rate-limit and shutdown disconnects.
+- `test_db` (POSIX only) checks the crypto and the database. A child process runs a trade or a claim and is SIGKILLed partway through, at every crash point and in 300 random rounds. The test then reopens the database and checks that every item exists exactly once, total Meseta is unchanged, and `integrity_check` passes.
 - `python3 server/tools/lan_probe.py [--expect-name NAME] [--expect-players N]` broadcasts a probe and checks the replies against a running server.
 
 ## Measured (macOS, Apple Silicon, release build, 0 clients, 65 s)
 
 | | Target | Measured |
 | --- | --- | --- |
-| Memory (RSS) | < 50 MB | 1.8 MB |
+| Memory (RSS) | < 50 MB | 1.8 MB (3.2 MB with the database open) |
 | CPU (one core) | < 2% | 0.13% (0.0–0.1% in `ps`) |
 | Tick rate | 30 Hz | 30.01 Hz, 0 late ticks; each tick's work averages 0.026 ms, max 0.111 ms |
 
