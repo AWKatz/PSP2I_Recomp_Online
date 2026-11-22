@@ -1,0 +1,96 @@
+# Flatpak for PSP2i Recompiled (Linux desktop and the Steam Deck).
+#
+# Build on the Deck (or any x86_64/arm64 Linux) from the repository root,
+# after port/gen has been generated from your EBOOT.BIN:
+#   port/linux/flatpak/build_flatpak.sh
+# The game itself (EBOOT.BIN, the ISO, fonts, saves) is not packaged: it is
+# read from ~/.var/app/io.github.zmbkilla.PSP2iRecomp/data/psp2i (see README.md).
+id: io.github.zmbkilla.PSP2iRecomp
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: psp2i-launch
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=all              # gamepads (the Deck's controls through SDL3/Steam Input)
+  - --device=dri              # OpenGL
+  - --share=network           # the MMO client (ENABLE_MMO_NET builds)
+  - --filesystem=/run/media:ro   # an ISO on the SD card (psp2i.ini iso=)
+  - --filesystem=home:ro         # or anywhere in home
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /lib/cmake
+  - /share/doc
+  - '*.a'
+modules:
+  # SDL3: not in the 25.08 runtime; the same release line as the macOS build.
+  - name: SDL3
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DSDL_TESTS=OFF
+      - -DSDL_EXAMPLES=OFF
+      - -DSDL_STATIC=OFF
+    sources:
+      - type: archive
+        url: https://github.com/libsdl-org/SDL/releases/download/release-3.4.20/SDL3-3.4.20.tar.gz
+        sha256: f3bb06f55bed9557227a700af2ea62e49497ebdf58037732a731a5fb3ef8581f
+
+  # FFmpeg, only what the movie decoder uses (H.264 decode, swscale), so the
+  # movies do not depend on the runtime's optional codecs extension.
+  - name: ffmpeg
+    config-opts:
+      - --disable-everything
+      - --disable-programs
+      - --disable-doc
+      - --disable-static
+      - --enable-shared
+      - --disable-avformat
+      - --disable-avdevice
+      - --disable-avfilter
+      - --disable-swresample
+      - --enable-decoder=h264
+    sources:
+      - type: archive
+        url: https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
+        sha256: 8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e
+
+  - name: psp2i
+    buildsystem: cmake-ninja
+    subdir: port/linux
+    builddir: true
+    build-options:
+      # The ATRAC decoder sources (and ENet, in an MMO build) are downloaded
+      # at configure time from pinned commits.
+      build-args:
+        - --share=network
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_PREFIX_PATH=/app
+      - -DENABLE_MMO_NET=OFF      # ON: the MMO client (client_config.toml)
+    post-install:
+      - install -Dm755 /run/build/psp2i/port/linux/flatpak/psp2i-launch.sh /app/bin/psp2i-launch
+      - install -Dm644 /run/build/psp2i/port/linux/flatpak/io.github.zmbkilla.PSP2iRecomp.desktop /app/share/applications/io.github.zmbkilla.PSP2iRecomp.desktop
+      - install -Dm644 /run/build/psp2i/port/linux/flatpak/io.github.zmbkilla.PSP2iRecomp.png /app/share/icons/hicolor/256x256/apps/io.github.zmbkilla.PSP2iRecomp.png
+      - install -Dm644 /run/build/psp2i/port/linux/flatpak/io.github.zmbkilla.PSP2iRecomp.metainfo.xml /app/share/metainfo/io.github.zmbkilla.PSP2iRecomp.metainfo.xml
+    sources:
+      - type: dir
+        path: ../../..
+        skip:
+          - port/build-macos
+          - port/build-prod
+          - port/linux/flatpak/.flatpak-builder
+          - port/linux/flatpak/build-dir
+          - port/linux/flatpak/repo
+          - psp2i.flatpak
+          - .git
+          - psprecomp/build
+          - GameData
+          - game.iso
+          - EBOOT.BIN
+          - logs
+          - prod

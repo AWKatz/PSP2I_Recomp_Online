@@ -104,3 +104,9 @@ port/android/build/
 port/android/app/build/
 port/android/app/.cxx/
 port/android/local.properties
+
+# Flatpak build output
+port/linux/flatpak/.flatpak-builder/
+port/linux/flatpak/build-dir/
+port/linux/flatpak/repo/
+psp2i.flatpak
