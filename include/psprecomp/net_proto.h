@@ -23,7 +23,14 @@ enum {
     MSG_C2S_ENEMY_KILLED  = 0x0010,   /* a player killed an enemy: the server rolls the loot */
     MSG_S2C_SPAWN_DROP    = 0x8010,   /* to every player: a drop appears */
     MSG_S2C_KILL_REWARD   = 0x8011,   /* to the killer: experience and type points */
+    MSG_S2C_SYSTEM_NOTICE = 0x8020,   /* an announcement for every player's HUD */
+    MSG_S2C_SERVER_EVENTS = 0x8021,   /* the active seasonal events / lobby themes */
 };
+
+/* MSG_S2C_SYSTEM_NOTICE: hdr, colour u32 (0xRRGGBB), text[128] (UTF-8, NUL-padded) */
+enum { PSP_MMO_NOTICE_TEXT_LEN = 128, PSP_MMO_NOTICE_LEN = 8 + 4 + PSP_MMO_NOTICE_TEXT_LEN };
+/* MSG_S2C_SERVER_EVENTS: hdr, active event bits u32 (bit i = the server's event i) */
+enum { PSP_MMO_EVENTS_LEN = 8 + 4 };
 
 /* MSG_C2S_ENEMY_KILLED: hdr, enemy id u32, mission id u32, x/y/z f32 */
 enum { PSP_MMO_ENEMY_KILLED_LEN = 8 + 4 + 4 + 12 };
@@ -48,6 +55,7 @@ enum {
     PSP_MMO_ERR_FULL      = 3,
     PSP_MMO_ERR_DUPLICATE = 4,        /* that MAC is already in a session */
     PSP_MMO_ERR_MAC       = 5,        /* zero, broadcast or multicast MAC */
+    PSP_MMO_ERR_BANNED    = 6,        /* this address is banned */
 };
 
 /* Disconnect reasons (the ENet disconnect data a client sees) */

@@ -65,6 +65,8 @@ int      psp_net_enet_disconnect(psp_net_enet *e, uint64_t id, uint32_t reason);
 void     psp_net_enet_disconnect_all(psp_net_enet *e, uint32_t reason);
 /* Host: a peer's address as "ip:port". 0 on success. */
 int      psp_net_enet_peer_address(const psp_net_enet *e, uint64_t id, char *out, size_t cap);
+/* Host: a peer's round-trip time in ms (ENet's smoothed estimate); -1 if unknown. */
+int      psp_net_enet_peer_rtt(const psp_net_enet *e, uint64_t id);
 /* Client: the reason the host gave when it disconnected us (0 = none / still joined). */
 uint32_t psp_net_enet_disconnect_reason(const psp_net_enet *e);
 

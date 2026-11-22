@@ -376,6 +376,11 @@ int psp_net_enet_peer_address(const psp_net_enet *e, uint64_t id, char *out, siz
     return PSP_NET_OK;
 }
 
+int psp_net_enet_peer_rtt(const psp_net_enet *e, uint64_t id) {
+    const slot *s = e->is_host ? slot_by_id(e, id) : NULL;
+    return s ? (int)s->peer->roundTripTime : -1;
+}
+
 uint32_t psp_net_enet_disconnect_reason(const psp_net_enet *e) { return e->disc_reason; }
 
 int psp_net_enet_peer_count(const psp_net_enet *e) {
