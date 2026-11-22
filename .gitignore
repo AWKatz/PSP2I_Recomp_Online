@@ -118,3 +118,6 @@ port/android/local.properties
 
 # Flatpak (its output is under build/flatpak)
 psp2i.flatpak
+
+# runtime logs and RAM snapshots (copies of game memory): never committed
+logs/
