@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define MAX_SESSIONS 64
 
@@ -47,6 +48,7 @@ struct srv {
     loot_rng    rng;
     uint64_t    drops_sig, rates_sig;  /* content signatures of the config files (0 = missing) */
     uint64_t    next_drop_id;
+    uint32_t    events;
 };
 
 static void slog(srv *s, const char *fmt, ...) {
@@ -114,6 +116,15 @@ static void send_ack(srv *s, uint64_t id, uint32_t status) {
     t->send_packet(t->ctx, &to, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, ack, sizeof ack);
 }
 
+static void send_events(srv *s, uint64_t id) {
+    uint8_t m[PSP_MMO_EVENTS_LEN];
+    psp_mmo_put_hdr(m, MSG_S2C_SERVER_EVENTS);
+    psp_mmo_put_u32(m + 8, s->events);
+    const psp_net_transport *t = psp_net_enet_transport(s->enet);
+    const psp_net_peer to = { { 0 }, id };
+    t->send_packet(t->ctx, &to, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, m, sizeof m);
+}
+
 static void on_handshake(srv *s, session *ss, const psp_net_packet *p) {
     char name[PSP_MMO_NAME_LEN + 1];
     uint8_t mac[6];
@@ -123,8 +134,16 @@ static void on_handshake(srv *s, session *ss, const psp_net_packet *p) {
             if (s->sess[i].state == SS_ACTIVE && !memcmp(s->sess[i].mac, mac, 6)) { st = PSP_MMO_ERR_DUPLICATE; break; }
     }
     if (st == PSP_MMO_OK && count(s, SS_ACTIVE) >= s->cfg.max_players) st = PSP_MMO_ERR_FULL;
-    char addr[64] = "?";
+    char addr[64] = "?", ip[64] = "", why[128] = "";
     psp_net_enet_peer_address(s->enet, ss->id, addr, sizeof addr);
+    srv_find_ip(s, ss->id, ip, sizeof ip);
+    if (st == PSP_MMO_OK && s->cfg.database && db_ip_banned(s->cfg.database, ip, why, sizeof why)) {
+        send_ack(s, ss->id, PSP_MMO_ERR_BANNED);
+        ss->kick = PSP_MMO_DISC_BANNED;
+        s->st.handshakes_rejected++;
+        slog(s, "handshake from peer %llu (%s) refused: banned (%s)", (unsigned long long)ss->id, addr, why);
+        return;
+    }
     if (st != PSP_MMO_OK) {
         send_ack(s, ss->id, st);
         ss->kick = PSP_MMO_DISC_HANDSHAKE;
@@ -135,8 +154,10 @@ static void on_handshake(srv *s, session *ss, const psp_net_packet *p) {
     memcpy(ss->mac, mac, 6);
     memcpy(ss->name, name, sizeof name);
     ss->state = SS_ACTIVE;
+    ss->joined_ms = s->now_ms;
     psp_net_enet_authorize(s->enet, ss->id, 1);
     send_ack(s, ss->id, PSP_MMO_OK);
+    send_events(s, ss->id);
     s->st.handshakes_ok++;
     slog(s, "player '%s' joined: session %llu, mac %02X:%02X:%02X:%02X:%02X:%02X, %s (%d/%d)", name,
          (unsigned long long)ss->id, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], addr, count(s, SS_ACTIVE), s->cfg.max_players);
@@ -191,10 +212,11 @@ static uint64_t file_sig(const char *path) {
     return (h ^ n) | 1;
 }
 
+enum { RELOAD_DROPS = 1, RELOAD_RATES = 2 };
 static void check_configs(srv *s, int force) {
     char err[320];
     const uint64_t ds = file_sig(s->cfg.drop_tables_path);
-    if (s->cfg.drop_tables_path && (force || ds != s->drops_sig)) {
+    if (s->cfg.drop_tables_path && ((force & RELOAD_DROPS) || ds != s->drops_sig)) {
         s->drops_sig = ds;
         loot_table *t = ds ? loot_load(s->cfg.drop_tables_path, err, sizeof err) : NULL;
         if (t) {
@@ -210,7 +232,7 @@ static void check_configs(srv *s, int force) {
         }
     }
     const uint64_t rs = file_sig(s->cfg.rates_path);
-    if (s->cfg.rates_path && (force || rs != s->rates_sig)) {
+    if (s->cfg.rates_path && ((force & RELOAD_RATES) || rs != s->rates_sig)) {
         s->rates_sig = rs;
         loot_rates r;
         const int rc = rs ? loot_rates_load(s->cfg.rates_path, &r, err, sizeof err) : -2;
@@ -283,7 +305,9 @@ static void on_kill(srv *s, session *ss, const psp_net_packet *p) {
     }
 }
 
-void srv_reload(srv *s) { check_configs(s, 1); }
+void srv_reload(srv *s) { check_configs(s, RELOAD_DROPS | RELOAD_RATES); }
+void srv_reload_drops(srv *s) { check_configs(s, RELOAD_DROPS); }
+void srv_reload_rates(srv *s) { check_configs(s, RELOAD_RATES); }
 loot_rates srv_rates(const srv *s) { return s->rates; }
 int srv_set_rate(srv *s, const char *name, double v) {
     if (loot_rates_set(&s->rates, name, v) != 0) return -1;
@@ -358,7 +382,7 @@ int srv_start(srv *s) {
         }
     }
     s->started = 1;
-    check_configs(s, 1);
+    check_configs(s, RELOAD_DROPS | RELOAD_RATES);
     if (s->lan)
         slog(s, "'%s': LAN mode, game port %u (udp), discovery port %u (udp), up to %d players, version %s (hash %08X)",
              s->name, (unsigned)srv_port(s), (unsigned)srv_lan_port(s), s->cfg.max_players,
@@ -466,3 +490,102 @@ void srv_get_stats(const srv *s, srv_stats *out) {
 
 uint16_t srv_port(const srv *s) { return s->enet ? psp_net_enet_port(s->enet) : 0; }
 uint16_t srv_lan_port(const srv *s) { return s->lan ? psp_mmo_lan_responder_port(s->lan) : 0; }
+
+/* ---- admin ---------------------------------------------------------------------------- */
+
+static const char *const EVENTS[SRV_EVENT_COUNT] = { "spring", "summer", "halloween", "christmas", "new_year", "anniversary" };
+const char *srv_event_name(int i) { return i >= 0 && i < SRV_EVENT_COUNT ? EVENTS[i] : NULL; }
+uint32_t srv_events(const srv *s) { return s->events; }
+db *srv_db(const srv *s) { return s->cfg.database; }
+const char *srv_drop_tables_path(const srv *s) { return s->cfg.drop_tables_path; }
+const char *srv_name(const srv *s) { return s->name; }
+int srv_max_players(const srv *s) { return s->cfg.max_players; }
+int srv_mode_online(const srv *s) { return s->cfg.mode == SRV_MODE_ONLINE; }
+
+int srv_find_ip(const srv *s, uint64_t id, char *ip, size_t cap) {
+    char addr[64];
+    if (!s->enet || psp_net_enet_peer_address(s->enet, id, addr, sizeof addr) != 0) return -1;
+    char *colon = strrchr(addr, ':');
+    if (colon) *colon = 0;
+    snprintf(ip, cap, "%s", addr);
+    return 0;
+}
+
+int srv_players(const srv *s, srv_player *out, int max) {
+    int n = 0;
+    for (int i = 0; i < MAX_SESSIONS && n < max; i++) {
+        const session *ss = &s->sess[i];
+        if (ss->state != SS_ACTIVE) continue;
+        srv_player *p = &out[n++];
+        memset(p, 0, sizeof *p);
+        p->session = ss->id;
+        memcpy(p->name, ss->name, sizeof p->name);
+        snprintf(p->mac, sizeof p->mac, "%02X:%02X:%02X:%02X:%02X:%02X", ss->mac[0], ss->mac[1], ss->mac[2], ss->mac[3], ss->mac[4], ss->mac[5]);
+        psp_net_enet_peer_address(s->enet, ss->id, p->ip, sizeof p->ip);
+        p->ping_ms = psp_net_enet_peer_rtt(s->enet, ss->id);
+        p->joined_ms = ss->joined_ms;
+        snprintf(p->location, sizeof p->location, "-");
+    }
+    return n;
+}
+
+int srv_kick(srv *s, uint64_t id, uint32_t reason) {
+    session *ss = find(s, id);
+    if (!ss) return -1;
+    slog(s, "kicking session %llu ('%s'), reason %u", (unsigned long long)id, ss->name, (unsigned)reason);
+    kick(s, ss, reason);
+    return 0;
+}
+
+int srv_kick_ip(srv *s, const char *ip, uint32_t reason) {
+    int n = 0;
+    for (int i = 0; i < MAX_SESSIONS; i++) {
+        session *ss = &s->sess[i];
+        char pip[64];
+        if (ss->state == SS_FREE || srv_find_ip(s, ss->id, pip, sizeof pip) != 0 || strcmp(pip, ip)) continue;
+        kick(s, ss, reason);
+        n++;
+    }
+    return n;
+}
+
+int srv_ban_session(srv *s, uint64_t id, const char *reason, int64_t minutes, const char *admin, char *ip_out) {
+    char ip[64];
+    if (!s->cfg.database || !find(s, id) || srv_find_ip(s, id, ip, sizeof ip) != 0) return -1;
+    const int64_t expires = minutes > 0 ? (int64_t)time(NULL) + minutes * 60 : 0;
+    if (db_ip_ban(s->cfg.database, ip, reason, expires, admin) != DB_OK) return -1;
+    if (ip_out) snprintf(ip_out, 64, "%s", ip);
+    srv_kick_ip(s, ip, PSP_MMO_DISC_BANNED);
+    return 0;
+}
+
+int srv_announce(srv *s, const char *text, uint32_t rgb) {
+    if (!s->enet || !text || !*text) return -1;
+    uint8_t m[PSP_MMO_NOTICE_LEN];
+    psp_mmo_put_hdr(m, MSG_S2C_SYSTEM_NOTICE);
+    psp_mmo_put_u32(m + 8, rgb & 0xFFFFFFu);
+    psp_mmo_put_str(m + 12, text, PSP_MMO_NOTICE_TEXT_LEN);
+    const psp_net_transport *t = psp_net_enet_transport(s->enet);
+    int n = 0;
+    for (int i = 0; i < MAX_SESSIONS; i++) {
+        if (s->sess[i].state != SS_ACTIVE) continue;
+        const psp_net_peer to = { { 0 }, s->sess[i].id };
+        n += t->send_packet(t->ctx, &to, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, m, sizeof m) == PSP_NET_OK;
+    }
+    slog(s, "announcement (#%06X) to %d players: %s", (unsigned)(rgb & 0xFFFFFFu), n, text);
+    return n;
+}
+
+int srv_set_event(srv *s, const char *name, int on) {
+    for (int i = 0; i < SRV_EVENT_COUNT; i++) {
+        if (strcmp(name, EVENTS[i])) continue;
+        const uint32_t was = s->events;
+        if (on) s->events |= 1u << i; else s->events &= ~(1u << i);
+        if (s->events != was) {
+            slog(s, "event '%s' %s", name, on ? "on" : "off");
+            for (int k = 0; k < MAX_SESSIONS; k++) if (s->sess[k].state == SS_ACTIVE) send_events(s, s->sess[k].id);
+        }
+        return 0;
+    }
+    return -1;
+}

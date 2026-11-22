@@ -40,7 +40,16 @@ if(UNIX)
     endif()
 endif()
 
-add_library(psp2i_server_core STATIC src/server.c src/clock.c src/db.c src/crypto.c src/loot.c)
+# The admin panel's page, script and styles, compiled in.
+set(WEB_FILES ${CMAKE_CURRENT_SOURCE_DIR}/web/index.html ${CMAKE_CURRENT_SOURCE_DIR}/web/app.js ${CMAKE_CURRENT_SOURCE_DIR}/web/app.css)
+add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/web_assets.c
+    COMMAND ${CMAKE_COMMAND} -DOUT=${CMAKE_CURRENT_BINARY_DIR}/web_assets.c -DIN_DIR=${CMAKE_CURRENT_SOURCE_DIR}/web
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake
+    DEPENDS ${WEB_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake
+    COMMENT "Embedding the admin panel")
+
+add_library(psp2i_server_core STATIC src/server.c src/clock.c src/db.c src/crypto.c src/loot.c
+    src/admin.c src/web.c src/console.c ${CMAKE_CURRENT_BINARY_DIR}/web_assets.c)
 target_include_directories(psp2i_server_core PUBLIC src)
 target_link_libraries(psp2i_server_core PUBLIC psprecomp_net psp2i_sqlite)
 if(WIN32)
@@ -67,6 +76,11 @@ enable_testing()
 add_executable(test_server EXCLUDE_FROM_ALL tests/test_server.c)
 target_link_libraries(test_server PRIVATE psp2i_server_core)
 add_test(NAME test_server COMMAND test_server)
+add_executable(test_admin EXCLUDE_FROM_ALL tests/test_admin.c)
+target_link_libraries(test_admin PRIVATE psp2i_server_core)
+if(NOT WIN32)
+    add_test(NAME test_admin COMMAND test_admin)
+endif()
 add_executable(test_loot EXCLUDE_FROM_ALL tests/test_loot.c)
 target_link_libraries(test_loot PRIVATE psp2i_server_core)
 add_test(NAME test_loot COMMAND test_loot ${CMAKE_CURRENT_SOURCE_DIR}/config/drop_tables.json ${CMAKE_CURRENT_SOURCE_DIR}/config/rates.toml)

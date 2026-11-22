@@ -56,6 +56,25 @@ The tables pair plain columns with JSON:
 
 Trades, Meseta transfers and drop claims each run as one `BEGIN IMMEDIATE` transaction (`db_trade`, `db_meseta_transfer`, `db_drop_claim`). A crash at any point leaves the database either before or after the whole move. Each item's `uid` makes that checkable: every ledger `uid` must appear in exactly one inventory.
 
+## Admin: web panel, console, RCON
+
+`--web-port N` serves the admin panel. It's bound to 127.0.0.1 unless you pass `--web-bind`, and it's compiled into the binary from `server/web/`. Sign-in needs an admin account: create one with `--add-admin NAME PASS` or `/account add NAME PASS admin`.
+
+The REST API is under `/api/v1/` and every call needs `Authorization: Bearer <token>`. Endpoints:
+- `login` (`POST`; returns the token) and `logout` (`POST`);
+- `status` (`GET`); `stream` (`GET`, a Server-Sent Events feed of the status every second);
+- `kick`, `ban`, `unban`, `admin`, `announce`, `reload` (`POST`);
+- `rates` (`GET` / `POST`); `events` (`POST`); `drop_tables` (`GET` / `POST`, validated before it's saved);
+- `rcon` (`POST`, any console command);
+- `audit?q=&limit=&offset=`, `accounts?q=`, `bans` (`GET`).
+
+Security:
+- Logins are throttled after 5 failures a minute per address.
+- Tokens expire after 8 hours of inactivity.
+- Responses carry a strict Content-Security-Policy.
+
+The stdin console, RCON and the panel share one command layer (`src/admin.c`). Every change is written to `audit_logs` with its actor: `console`, `rcon:<admin>` or `web:<admin>`.
+
 ## Clients
 
 With `lan_discovery = true` and no `server_ip` in `client_config.toml`, an MMO-build client broadcasts a probe. It then joins the first server that answers with the same version hash (`PSP_MMO_VERSION_STRING`).
@@ -64,6 +83,7 @@ With `lan_discovery = true` and no `server_ip` in `client_config.toml`, an MMO-b
 
 - `cmake --build server/build --target test_server && server/build/test_server` runs the server on its own thread at 30 Hz against real ENet clients. It covers the handshake checks, LAN discovery, relay gating, and the timeout, protocol, rate-limit and shutdown disconnects.
 - `test_db` (POSIX only) checks the crypto and the database. A child process runs a trade or a claim and is SIGKILLed partway through, at every crash point and in 300 random rounds. The test then reopens the database and checks that every item exists exactly once, total Meseta is unchanged, and `integrity_check` passes.
+- `test_admin` covers the panel and its API end to end: the page, logins and throttling, rates set through the API changing a real client's drops, a ban disconnecting a client within 1 s and refusing it on reconnect, announcements, events, the drop-table editor, the audit log, RCON, the event stream and the console.
 - `python3 server/tools/lan_probe.py [--expect-name NAME] [--expect-players N]` broadcasts a probe and checks the replies against a running server.
 
 ## Measured (macOS, Apple Silicon, release build, 0 clients, 65 s)

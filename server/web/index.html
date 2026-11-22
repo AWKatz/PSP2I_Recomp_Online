@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PSP2i Server Admin</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+
+<section id="login" class="login" hidden>
+  <form id="login-form" class="card login-card">
+    <h1>PSP2i Server</h1>
+    <p class="muted">Admin sign-in</p>
+    <label>Username <input id="login-user" autocomplete="username" autofocus required></label>
+    <label>Password <input id="login-pass" type="password" autocomplete="current-password" required></label>
+    <button type="submit" class="primary">Sign in</button>
+    <p id="login-error" class="error" role="alert"></p>
+  </form>
+</section>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="brand"><span class="dot" id="live-dot"></span><strong id="srv-name">PSP2i Server</strong> <span class="pill" id="srv-mode"></span></div>
+    <nav id="tabs">
+      <button data-tab="dash" class="active">Dashboard</button>
+      <button data-tab="mod">Moderation</button>
+      <button data-tab="rates">Rates &amp; Events</button>
+      <button data-tab="drops">Drop Tables</button>
+      <button data-tab="announce">Broadcast</button>
+      <button data-tab="audit">Audit Log</button>
+      <button data-tab="console">Console</button>
+    </nav>
+    <div class="who"><span id="who"></span> <button id="logout" class="ghost">Sign out</button></div>
+  </header>
+
+  <main>
+    <!-- Dashboard -->
+    <section id="tab-dash" class="tab">
+      <div class="stats">
+        <div class="stat"><span class="k">Players</span><span class="v" id="s-players">–</span></div>
+        <div class="stat"><span class="k">Tick rate</span><span class="v" id="s-hz">–</span><span class="sub" id="s-tick"></span></div>
+        <div class="stat"><span class="k">CPU</span><span class="v" id="s-cpu">–</span></div>
+        <div class="stat"><span class="k">Memory</span><span class="v" id="s-rss">–</span></div>
+        <div class="stat"><span class="k">Uptime</span><span class="v" id="s-up">–</span></div>
+        <div class="stat"><span class="k">Drops</span><span class="v" id="s-drops">–</span><span class="sub" id="s-rare"></span></div>
+      </div>
+      <div class="card">
+        <h2>Players online</h2>
+        <table class="grid">
+          <thead><tr><th>Session</th><th>Character</th><th>Account</th><th>IP</th><th>Ping</th><th>Online</th><th>Lobby / mission</th><th></th></tr></thead>
+          <tbody id="players"></tbody>
+        </table>
+        <p class="empty" id="players-empty">No one is connected.</p>
+      </div>
+    </section>
+
+    <!-- Moderation -->
+    <section id="tab-mod" class="tab" hidden>
+      <div class="cols">
+        <div class="card">
+          <h2>Accounts</h2>
+          <input id="acc-q" type="search" placeholder="Search by name or IP">
+          <table class="grid">
+            <thead><tr><th>ID</th><th>Name</th><th>Admin</th><th>Status</th><th>Last IP</th><th></th></tr></thead>
+            <tbody id="accounts"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h2>Ban an IP address</h2>
+          <form id="ipban-form" class="row">
+            <input id="ipban-ip" placeholder="e.g. 203.0.113.7" required>
+            <button class="danger" type="submit">Ban…</button>
+          </form>
+          <h2>IP bans</h2>
+          <table class="grid">
+            <thead><tr><th>IP</th><th>Reason</th><th>Until</th><th>By</th><th></th></tr></thead>
+            <tbody id="ipbans"></tbody>
+          </table>
+          <p class="empty" id="ipbans-empty">No IP bans.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Rates & events -->
+    <section id="tab-rates" class="tab" hidden>
+      <div class="cols">
+        <div class="card">
+          <h2>Rate multipliers</h2>
+          <p class="muted">Applied to the next roll. Changes are audited and stay in memory until the server restarts or <code>rates.toml</code> changes.</p>
+          <form id="rates-form">
+            <div id="rate-rows"></div>
+            <button class="primary" type="submit">Apply</button>
+          </form>
+        </div>
+        <div class="card">
+          <h2>Events &amp; lobby themes</h2>
+          <p class="muted">Sent to every player at once.</p>
+          <div id="event-rows"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Drop tables -->
+    <section id="tab-drops" class="tab" hidden>
+      <div class="card">
+        <div class="row between">
+          <h2>Drop tables</h2>
+          <div class="row">
+            <input id="drop-q" type="search" placeholder="Filter enemies and items">
+            <button id="drop-reload" class="ghost">Revert</button>
+            <button id="drop-apply" class="primary">Apply &amp; hot-reload</button>
+          </div>
+        </div>
+        <p id="drop-msg" class="note"></p>
+        <div class="cols">
+          <div>
+            <h3>Overview</h3>
+            <table class="grid small">
+              <thead><tr><th>ID</th><th>Enemy</th><th>EXP</th><th>Drop %</th><th>Items</th><th>Rares</th></tr></thead>
+              <tbody id="drop-table"></tbody>
+            </table>
+          </div>
+          <div>
+            <h3>JSON <span class="muted">(validated before it is saved)</span></h3>
+            <textarea id="drop-json" spellcheck="false"></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Broadcast -->
+    <section id="tab-announce" class="tab" hidden>
+      <div class="card narrow">
+        <h2>System announcement</h2>
+        <form id="announce-form">
+          <label>Message <input id="ann-text" maxlength="127" required placeholder="Server restart in 10 minutes"></label>
+          <label>Colour <input id="ann-color" type="color" value="#ffd84a"></label>
+          <div class="preview"><span id="ann-preview">Your announcement</span></div>
+          <button class="primary" type="submit">Send to all players</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Audit -->
+    <section id="tab-audit" class="tab" hidden>
+      <div class="card">
+        <div class="row between"><h2>Audit log</h2><input id="audit-q" type="search" placeholder="Search admin, action, target, details"></div>
+        <table class="grid small">
+          <thead><tr><th>Time</th><th>Admin</th><th>Action</th><th>Target</th><th>Details</th></tr></thead>
+          <tbody id="audit"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Console -->
+    <section id="tab-console" class="tab" hidden>
+      <div class="card">
+        <h2>Console</h2>
+        <pre id="console-out" class="console"></pre>
+        <form id="console-form" class="row"><input id="console-in" placeholder="/help" autocomplete="off"><button class="primary">Run</button></form>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlg-form">
+    <h2 id="dlg-title"></h2>
+    <p id="dlg-text" class="muted"></p>
+    <div id="dlg-fields"></div>
+    <div class="row end"><button value="cancel" class="ghost">Cancel</button><button value="ok" id="dlg-ok" class="danger">OK</button></div>
+  </form>
+</dialog>
+<div id="toast" class="toast" role="status"></div>
+</body>
+</html>

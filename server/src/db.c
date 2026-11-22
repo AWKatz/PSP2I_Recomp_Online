@@ -65,6 +65,14 @@ static const char SCHEMA[] =
     "  claimed_by INTEGER REFERENCES characters(char_id),"
     "  claimed_at INTEGER,"
     "  item_uid   INTEGER REFERENCES item_ledger(uid)"
+    ") STRICT;"
+    /* v2 */
+    "CREATE TABLE IF NOT EXISTS ip_bans ("
+    "  ip         TEXT PRIMARY KEY,"
+    "  reason     TEXT,"
+    "  expires_at INTEGER,"                                   /* unix seconds; NULL = permanent */
+    "  created_at INTEGER NOT NULL DEFAULT (unixepoch()),"
+    "  admin_user TEXT"
     ") STRICT;";
 
 static void dlog(db *d, const char *fmt, ...) {
@@ -76,6 +84,8 @@ static void dlog(db *d, const char *fmt, ...) {
     va_end(ap);
     d->log(line);
 }
+
+static char *dup_col(sqlite3_stmt *st, int i);
 
 static void fault(db *d, const char *point) { if (d->fault) d->fault(point, d->fault_user); }
 
@@ -140,7 +150,7 @@ db *db_open(const char *path, void (*log)(const char *line), char *err, size_t e
         db_close(d);
         return NULL;
     }
-    if (begin(d) != DB_OK || exec(d, SCHEMA) != DB_OK || exec(d, "PRAGMA user_version=1") != DB_OK || commit(d) != DB_OK) {
+    if (begin(d) != DB_OK || exec(d, SCHEMA) != DB_OK || exec(d, "PRAGMA user_version=2") != DB_OK || commit(d) != DB_OK) {
         snprintf(err, err_cap, "%s: schema: %s", path, sqlite3_errmsg(d->h));
         rollback(d);
         db_close(d);
@@ -257,6 +267,90 @@ static int set_ban(db *d, int64_t id, int on, const char *reason, int64_t expire
 
 int db_account_ban(db *d, int64_t id, const char *reason, int64_t expires, const char *admin) { return set_ban(d, id, 1, reason, expires, admin); }
 int db_account_unban(db *d, int64_t id, const char *admin) { return set_ban(d, id, 0, NULL, 0, admin); }
+
+int db_account_set_admin(db *d, int64_t id, int on, const char *admin) {
+    if (begin(d) != DB_OK) return DB_ERR;
+    sqlite3_stmt *st = prep(d, "UPDATE accounts SET is_admin = ?1 WHERE account_id = ?2");
+    if (st) { sqlite3_bind_int(st, 1, on ? 1 : 0); sqlite3_bind_int64(st, 2, id); }
+    if (step_done(d, st) != DB_OK) { rollback(d); return DB_ERR; }
+    if (sqlite3_changes(d->h) != 1) { rollback(d); return DB_NOT_FOUND; }
+    char target[32];
+    snprintf(target, sizeof target, "account:%lld", (long long)id);
+    if (audit_locked(d, admin, on ? "promote" : "demote", target, NULL) != DB_OK) { rollback(d); return DB_ERR; }
+    return commit(d);
+}
+
+/* ---- IP bans ---- */
+
+int db_ip_ban(db *d, const char *ip, const char *reason, int64_t expires, const char *admin) {
+    if (!ip || !*ip) return DB_ERR;
+    if (begin(d) != DB_OK) return DB_ERR;
+    sqlite3_stmt *st = prep(d, "INSERT INTO ip_bans (ip, reason, expires_at, admin_user) VALUES (?1, ?2, ?3, ?4) "
+                               "ON CONFLICT(ip) DO UPDATE SET reason = ?2, expires_at = ?3, admin_user = ?4, created_at = unixepoch()");
+    if (st) {
+        sqlite3_bind_text(st, 1, ip, -1, SQLITE_TRANSIENT);
+        if (reason) sqlite3_bind_text(st, 2, reason, -1, SQLITE_TRANSIENT);
+        if (expires > 0) sqlite3_bind_int64(st, 3, expires);
+        sqlite3_bind_text(st, 4, admin ? admin : "server", -1, SQLITE_TRANSIENT);
+    }
+    if (step_done(d, st) != DB_OK) { rollback(d); return DB_ERR; }
+    char target[80], details[400] = "";
+    snprintf(target, sizeof target, "ip:%s", ip);
+    sqlite3_stmt *js = prep(d, "SELECT json_object('reason', ?1, 'expires_at', ?2)");
+    if (js) {
+        if (reason) sqlite3_bind_text(js, 1, reason, -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(js, 2, expires);
+        if (sqlite3_step(js) == SQLITE_ROW) snprintf(details, sizeof details, "%s", (const char *)sqlite3_column_text(js, 0));
+        sqlite3_finalize(js);
+    }
+    if (audit_locked(d, admin, "ban", target, details[0] ? details : NULL) != DB_OK) { rollback(d); return DB_ERR; }
+    return commit(d);
+}
+
+int db_ip_unban(db *d, const char *ip, const char *admin) {
+    if (begin(d) != DB_OK) return DB_ERR;
+    sqlite3_stmt *st = prep(d, "DELETE FROM ip_bans WHERE ip = ?1");
+    if (st) sqlite3_bind_text(st, 1, ip ? ip : "", -1, SQLITE_TRANSIENT);
+    if (step_done(d, st) != DB_OK) { rollback(d); return DB_ERR; }
+    if (sqlite3_changes(d->h) != 1) { rollback(d); return DB_NOT_FOUND; }
+    char target[80];
+    snprintf(target, sizeof target, "ip:%s", ip);
+    if (audit_locked(d, admin, "unban", target, NULL) != DB_OK) { rollback(d); return DB_ERR; }
+    return commit(d);
+}
+
+int db_ip_banned(db *d, const char *ip, char *reason, size_t cap) {
+    sqlite3_stmt *st = prep(d, "SELECT reason, coalesce(expires_at, 0) FROM ip_bans WHERE ip = ?1");
+    if (!st) return 0;
+    sqlite3_bind_text(st, 1, ip ? ip : "", -1, SQLITE_TRANSIENT);
+    int banned = 0;
+    int64_t expires = 0;
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        banned = 1;
+        if (reason && cap) snprintf(reason, cap, "%s", sqlite3_column_text(st, 0) ? (const char *)sqlite3_column_text(st, 0) : "");
+        expires = sqlite3_column_int64(st, 1);
+    }
+    sqlite3_finalize(st);
+    if (banned && expires > 0 && expires <= (int64_t)time(NULL)) {
+        db_ip_unban(d, ip, "server (ban expired)");
+        return 0;
+    }
+    return banned;
+}
+
+char *db_json(db *d, const char *sql, int n, const char *const *params) {
+    sqlite3_stmt *st = prep(d, sql);
+    if (!st) return NULL;
+    for (int i = 0; i < n; i++) if (params[i]) sqlite3_bind_text(st, i + 1, params[i], -1, SQLITE_TRANSIENT);
+    char *out = NULL;
+    const int rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) out = dup_col(st, 0);
+    else if (rc == SQLITE_DONE) out = dup_col(st, 0);         /* no row: "" */
+    else dlog(d, "db: %s", sqlite3_errmsg(d->h));
+    sqlite3_finalize(st);
+    if (out && !*out) { free(out); out = malloc(5); if (out) memcpy(out, "null", 5); }
+    return out;
+}
 
 /* ---- characters ---- */
 

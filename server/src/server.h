@@ -61,10 +61,46 @@ uint32_t srv_version_hash(void);
 
 /* Loot: check both config files now (otherwise once a second). */
 void       srv_reload(srv *s);
+void       srv_reload_drops(srv *s);   /* only the drop tables: live rates stay */
+void       srv_reload_rates(srv *s);   /* back to rates.toml */
 loot_rates srv_rates(const srv *s);
 /* Live, in memory (the admin tools); -1 for an unknown name or bad value. */
 int        srv_set_rate(srv *s, const char *name, double value);
 int        srv_enemy_count(const srv *s);
+
+/* ---- admin (Task 2.4) ---- */
+typedef struct {
+    uint64_t session;
+    char     name[33];
+    char     mac[18];
+    char     ip[64];                  /* "ip:port" */
+    int      ping_ms;                 /* -1 unknown */
+    uint64_t joined_ms;               /* srv_tick time of the handshake */
+    int64_t  account_id;              /* 0 until accounts log in through the game */
+    char     location[32];            /* lobby / mission: "-" until the game reports it */
+} srv_player;
+int  srv_players(const srv *s, srv_player *out, int max);
+/* Disconnect a player (PSP_MMO_DISC_*); 0, or -1 if no such session. */
+int  srv_kick(srv *s, uint64_t session, uint32_t reason);
+/* Ban the player's IP (minutes 0 = permanent) and disconnect them (BANNED).
+ * Needs the database. The banned IP is written to ip_out (cap >= 64). */
+int  srv_ban_session(srv *s, uint64_t session, const char *reason, int64_t minutes, const char *admin, char *ip_out);
+/* Drop every connected peer from this IP (after a ban by IP). */
+int  srv_kick_ip(srv *s, const char *ip, uint32_t reason);
+/* MSG_S2C_SYSTEM_NOTICE to every player. */
+int  srv_announce(srv *s, const char *text, uint32_t rgb);
+/* Seasonal events / lobby themes: a fixed list; changes reach every player
+ * (MSG_S2C_SERVER_EVENTS), and new players on join. */
+#define SRV_EVENT_COUNT 6
+const char *srv_event_name(int i);     /* NULL past the end */
+int  srv_set_event(srv *s, const char *name, int on);   /* -1 unknown */
+uint32_t srv_events(const srv *s);
+int  srv_find_ip(const srv *s, uint64_t session, char *ip, size_t cap);   /* bare IP */
+db  *srv_db(const srv *s);
+const char *srv_drop_tables_path(const srv *s);
+const char *srv_name(const srv *s);
+int  srv_max_players(const srv *s);
+int  srv_mode_online(const srv *s);
 
 /* The handshake check, on its own (tests): PSP_MMO_OK or PSP_MMO_ERR_*.
  * On PSP_MMO_OK, name (33 bytes) and mac are filled in. */

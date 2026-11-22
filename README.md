@@ -61,12 +61,47 @@ cd server && ../build/server/psp2i_server --lan    # run it where config/ is, or
 | `--rates PATH` | config/rates.toml | rate multipliers |
 | `--stats S` | 60 | print a status line every S seconds (0 = off) |
 | `--run-seconds S` | off | exit after S seconds |
+| `--web-port N` | off | serve the web admin panel on this TCP port |
+| `--web-bind ADDR` | 127.0.0.1 | the panel's address: only this machine can reach it by default |
+| `--no-console` | | don't read commands from stdin |
+| `--add-admin NAME PASS` | | create an admin account and exit |
 | `--help` | | |
 
-Server commands:
-- Ctrl-C or `SIGTERM` shuts down and tells every client.
-- `SIGHUP` reloads the drop tables and rates at once. Editing either file also takes effect within a second, without disconnecting anyone.
-- An interactive console, RCON and a web admin panel will come with Task 2.4.
+Web admin panel:
+- Run `psp2i_server --add-admin NAME PASSWORD` once, then start the server with `--web-port 8080` and open http://127.0.0.1:8080/.
+- From the panel you can:
+  - watch live telemetry and the player list;
+  - kick, ban and unban players, IPs and accounts, and promote or demote admins;
+  - change rates and turn events on or off;
+  - edit the drop tables;
+  - send announcements;
+  - search the audit log;
+  - use a console.
+
+Commands: type them in the server's terminal, in the panel's Console tab, or send them over RCON:
+```sh
+curl -H "Authorization: Bearer $TOKEN" -d '{"command":"/status"}' http://127.0.0.1:8080/api/v1/rcon
+```
+
+| Command | What it does |
+| --- | --- |
+| `/status`, `/players` | server health and who is on |
+| `/kick <session> [reason]` | disconnect a player |
+| `/ban <session\|ip:ADDR\|account:N> [minutes] [reason]` | ban (0 minutes or none = permanent); the player is disconnected at once |
+| `/unban <ip:ADDR\|account:N>` | lift a ban |
+| `/account add <name> <password> [admin]` | create an account |
+| `/admin <account id> on\|off` | promote or demote an admin |
+| `/announce [colour] <text>` | announce to every player (colours: white, yellow, red, green, blue, cyan, magenta, orange, or #RRGGBB) |
+| `/setrate <name> <value>`, `/rates` | change or show the rate multipliers |
+| `/reload drops\|rates\|all` | re-read the config files |
+| `/event <name> on\|off`, `/events` | toggle an event or lobby theme (spring, summer, halloween, christmas, new_year, anniversary) |
+| `/audit [text]` | the last 15 audit entries |
+| `/shutdown`, `/help` | |
+
+Signals:
+- Ctrl-C or `SIGTERM` shuts the server down and tells every client.
+- `SIGHUP` reloads the config files.
+- Editing a config file also takes effect within a second, without disconnecting anyone.
 
 Config files:
 

@@ -30,7 +30,7 @@ enum {
     DB_BAD_CREDS = -8,
 };
 
-#define DB_SCHEMA_VERSION 1
+#define DB_SCHEMA_VERSION 2   /* 2: ip_bans */
 
 /* Open (or create) the database: WAL, foreign keys, busy timeout, schema.
  * NULL on failure, with the reason in err. */
@@ -48,6 +48,21 @@ int64_t db_account_login(db *d, const char *username, const char *password, cons
 /* expires_at: unix seconds, 0 = permanent. Audited as `admin`. */
 int db_account_ban(db *d, int64_t account_id, const char *reason, int64_t expires_at, const char *admin);
 int db_account_unban(db *d, int64_t account_id, const char *admin);
+
+int db_account_set_admin(db *d, int64_t account_id, int is_admin, const char *admin);
+
+/* ---- IP bans ---- */
+/* expires_at: unix seconds, 0 = permanent. Replaces an existing ban. Audited. */
+int db_ip_ban(db *d, const char *ip, const char *reason, int64_t expires_at, const char *admin);
+int db_ip_unban(db *d, const char *ip, const char *admin);      /* DB_NOT_FOUND if not banned */
+/* 1 if banned now (reason filled when given), 0 if not; an expired ban is lifted. */
+int db_ip_banned(db *d, const char *ip, char *reason, size_t cap);
+
+/* ---- JSON out ---- */
+/* Run a query whose first column of the first row is JSON (built with
+ * SQLite's json_object / json_group_array) and return it, malloc'd; NULL on
+ * error. Parameters are bound as text, ?1..?n. */
+char *db_json(db *d, const char *sql, int n, const char *const *params);
 
 /* ---- characters ---- */
 typedef struct {
