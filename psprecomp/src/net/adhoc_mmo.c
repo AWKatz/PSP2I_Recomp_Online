@@ -154,6 +154,47 @@ static int adhoc_dialog(int action, uint32_t param) {
     return 0;
 }
 
+static void connect_group(const char *how, uint32_t name_addr) {
+    memset(g_group, 0, sizeof g_group);
+    if (name_addr) psp_mem_read_block(g_group, name_addr, 8);
+    for (int i = 0; i < 8; i++) if (g_group[i] && (g_group[i] < 0x20 || g_group[i] > 0x7E)) g_group[i] = '?';
+    g_ctl_state = ADHOCCTL_STATE_CONNECTED;
+    queue_event(ADHOCCTL_EVENT_CONNECT, 0);
+    psp_net_log("mmo: %s: connected to group '%s'", how, g_group);
+}
+
+/* sceNetAdhocctlConnect(group name*) / Create(group name*) */
+static void hle_AdhocctlConnect(void) { connect_group("sceNetAdhocctlConnect", psp_arg(0)); psp_ret(0); }
+static void hle_AdhocctlCreate(void) { connect_group("sceNetAdhocctlCreate", psp_arg(0)); psp_ret(0); }
+/* sceNetAdhocctlJoin(SceNetAdhocctlScanInfo*): next(4), channel(4), group name(8), ... */
+static void hle_AdhocctlJoin(void) { connect_group("sceNetAdhocctlJoin", psp_arg(0) ? psp_arg(0) + 8 : 0); psp_ret(0); }
+
+/* sceNetAdhocctlDisconnect() */
+static void hle_AdhocctlDisconnect(void) {
+    if (g_ctl_state != ADHOCCTL_STATE_DISCONNECTED) {
+        g_ctl_state = ADHOCCTL_STATE_DISCONNECTED;
+        queue_event(ADHOCCTL_EVENT_DISCONNECT, 0);
+    }
+    psp_net_log("mmo: sceNetAdhocctlDisconnect (group '%s')", g_group);
+    psp_ret(0);
+}
+
+/* sceNetAdhocctlGetParameter(SceNetAdhocctlParameter*): channel s32, group name[8], bssid[6], nickname[128] */
+static void hle_AdhocctlGetParameter(void) {
+    const uint32_t p = psp_arg(0);
+    if (p) {
+        uint8_t mac[6];
+        psp_net_ether_addr(mac);
+        psp_write32(p, 1);
+        psp_mem_write_block(p + 4, g_group, 8);
+        psp_mem_write_block(p + 12, mac, 6);
+        char nick[128] = { 0 };
+        snprintf(nick, sizeof nick, "%s", g_name);
+        psp_mem_write_block(p + 18, nick, 128);
+    }
+    psp_ret(0);
+}
+
 /* sceNetAdhocctlGetState(int *state) */
 static void hle_AdhocctlGetState(void) {
     if (psp_arg(0)) psp_write32(psp_arg(0), (uint32_t)g_ctl_state);
@@ -199,6 +240,11 @@ void psp_net_mmo_register(void) {
     psp_hle_register(0x20B317A0, "sceNetAdhocctl", "sceNetAdhocctlAddHandler", hle_AdhocctlAddHandler);
     psp_hle_register(0x6402490B, "sceNetAdhocctl", "sceNetAdhocctlDelHandler", hle_AdhocctlDelHandler);
     psp_hle_register(0x75ECD386, "sceNetAdhocctl", "sceNetAdhocctlGetState", hle_AdhocctlGetState);
+    psp_hle_register(0x34401D65, "sceNetAdhocctl", "sceNetAdhocctlDisconnect", hle_AdhocctlDisconnect);
+    psp_hle_register(0x0AD043ED, "sceNetAdhocctl", "sceNetAdhocctlConnect", hle_AdhocctlConnect);
+    psp_hle_register(0xEC0635C1, "sceNetAdhocctl", "sceNetAdhocctlCreate", hle_AdhocctlCreate);
+    psp_hle_register(0x5E7F79C9, "sceNetAdhocctl", "sceNetAdhocctlJoin", hle_AdhocctlJoin);
+    psp_hle_register(0xDED9D28E, "sceNetAdhocctl", "sceNetAdhocctlGetParameter", hle_AdhocctlGetParameter);
     psp_net_set_adhoc_dialog(adhoc_dialog);
     mmo_matching_register();
 }
