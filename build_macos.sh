@@ -1,22 +1,6 @@
 #!/bin/zsh
 set -euo pipefail
 cd "${0:A:h}"
-# psprecomp now carries the Apple ARM64 fix (its commit ecc4521). A checkout
-# where an earlier build applied the patch below as local changes: undo them,
-# so the submodule update can move to that commit (the patch step then finds
-# the fix already there). Only while the checked-out commit lacks the fix.
-if ! git -C psprecomp grep -q _psp_fiber_switch HEAD -- src/hle/threadman.c 2>/dev/null &&
-   git -C psprecomp apply --reverse --check "$PWD/port/macos/psprecomp-apple-arm64.patch" 2>/dev/null; then
-    git -C psprecomp apply --reverse "$PWD/port/macos/psprecomp-apple-arm64.patch"
-fi
-git submodule update --init --recursive
-patch_file="$PWD/port/macos/psprecomp-apple-arm64.patch"
-if git -C psprecomp apply --check "$patch_file" 2>/dev/null; then
-    git -C psprecomp apply "$patch_file"
-elif ! git -C psprecomp apply --reverse --check "$patch_file" 2>/dev/null; then
-    echo "The macOS runtime patch conflicts with local changes." >&2
-    exit 1
-fi
 cmake -S psprecomp -B build/recomp -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build/recomp --target allegrexrecomp -j 4
 mkdir -p build/gen

@@ -6,6 +6,8 @@
 
 A recompilation project for **Phantasy Star Portable 2 Infinity (PSP2i)**, bringing the game to a native PC environment while preserving the original game's functionality and feel.
 
+**This fork (PSP2I_Recomp_Online)** adds online play: an MMO-capable client build and a self-contained dedicated server with a web admin panel. The single-player build is unchanged unless you build with `-DENABLE_MMO_NET=ON` (client) or `-DBUILD_DEDICATED_SERVER=ON` (server).
+
 ## Quick Start
 
 You need your own copy of the game: a decrypted `EBOOT.BIN` (needed to build) and the disc image (`.iso`). Everything that gets built or generated goes into `build/`.
@@ -121,6 +123,16 @@ Config files:
 
 More detail: [server/README.md](server/README.md), [port/linux/README.md](port/linux/README.md), [port/macos/README.md](port/macos/README.md).
 
+## Online roadmap (this fork)
+
+| Phase | Status |
+| --- | --- |
+| 1. Client networking: isolated network layer, ENet transport, MMO client entry | done |
+| 2. Dedicated server: headless server, SQLite persistence, server-side loot, web admin | done |
+| 3. Break the 4-player limits | next |
+
+Details are in [docs/net_hle_audit.md](docs/net_hle_audit.md) and [server/README.md](server/README.md).
+
 ## AI Disclosure
 
 This project makes **heavy use of AI-assisted development, primarily Claude**, for code analysis, reverse engineering assistance, debugging, implementation, and development tooling.
@@ -149,6 +161,15 @@ Current capabilities include:
 * Original 30 FPS mode
 * Infrastructure handling (Head to [psp2i discord](https://discord.gg/FeGvdBkrGa) for more info)
 * Official website loading
+* Linux and Steam Deck (Flatpak; untested so far)
+* PPSSPP and PSP saves load and save, encrypted as on hardware
+* **Online (this fork):**
+  * MMO client build: the game's ad hoc Multi Mode joins a server over ENet. The server is set in `client_config.toml` or found on the LAN automatically.
+  * Dedicated server `psp2i_server`: headless, 30 Hz, no runtime dependencies, about 2–4 MB of RAM.
+  * LAN and online modes, handshake checks, rate limiting, and bans by IP or account.
+  * Embedded SQLite database for accounts, characters and JSON inventories. Trades are crash-safe, so items can't be duplicated.
+  * Loot rolled by the server, with live rate multipliers and drop tables that reload while it runs.
+  * Web admin panel, console and RCON, with an audit log.
 
 > This project is actively being developed. Capabilities and compatibility may change as development progresses.
 
@@ -159,6 +180,9 @@ Current issues include:
 
 - 60 fps is not properly implemented
 - Adhoc not supported properly (relay has best support)
+- Online, this fork: the client completes the handshake and reaches the Matching Counter. Party play over the server (the rest of the ad hoc API, beginning with `sceNetAdhocctlAddHandler`) is not done yet.
+- Online, this fork: the shipped drop tables are placeholders until PSP2i's real tables are extracted.
+- The PPSSPP save support uses PPSSPP's `libkirk` (GPL; `port/third_party/libkirk`).
 
 ## Building
 

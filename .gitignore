@@ -7,21 +7,28 @@
 # ---- the game and everything extracted or derived from it -------------------
 game.iso
 EBOOT.BIN
+
 # extracted UMD (textures, models, audio, video), firmware fonts, memory stick
-GameData/flash0/*
+GameData/flash/font/*
+GameData/ms/PSP/SAVEDATA/NPJH50332/*
+
 # C generated from the game's code (derived from the EBOOT)
 Output/
 port/gen/
+
 # disassembly of game code
 port/*.dis
+
 # screenshots and captures of the game
 port/captures/
 *.ppm
+
 # lists of the game's firmware imports (derived from the EBOOT; kept local)
 port/imports.txt
 port/import_names.txt
 port/import_status.txt
 port/implemented.txt
+
 # defensive: disc images, PSP containers, firmware fonts, media formats
 *.iso
 *.cso
@@ -42,6 +49,7 @@ port/implemented.txt
 # ---- builds and third-party binaries -----------------------------------------
 # Everything built or generated goes under build/ (see README "Quick Start").
 build/
+
 # older locations, in case a checkout still has them
 FinalBuild/
 port/build/
@@ -85,6 +93,7 @@ port/testwork/
 # ---- notes and write-ups for other people, cheat codes: not source code
 party_*.txt
 rightstick.txt
+
 # runtime output wherever it lands
 crash_log.txt
 game_log.txt

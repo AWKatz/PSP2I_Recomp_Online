@@ -17,7 +17,6 @@ MANIFEST=port/linux/flatpak/$APP.yml
 
 if [[ ! -f build/gen/recomp_funcs.c || EBOOT.BIN -nt build/gen/recomp_funcs.c ]]; then
     [[ -f EBOOT.BIN ]] || { echo "Put your decrypted EBOOT.BIN in $(pwd) first." >&2; exit 1; }
-    git submodule update --init --recursive
     cmake -S psprecomp -B build/recomp -G Ninja -DCMAKE_BUILD_TYPE=Release
     cmake --build build/recomp --target allegrexrecomp
     mkdir -p build/gen

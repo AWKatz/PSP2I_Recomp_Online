@@ -11,10 +11,10 @@ brew install cmake ninja sdl3 ffmpeg
 ./Launch-PSP2i.command
 ```
 
-The build script initializes psprecomp, applies the included Apple ARM64 fiber
-patch if needed, generates C from your decrypted EBOOT.BIN, and builds the
+The build script builds the recompiler, generates C from your decrypted
+EBOOT.BIN, and builds the
 executable at build/macos/psp2i. Four compiler jobs limit peak memory use.
-The patch is also applied in the local psprecomp submodule; preserve that change.
+psprecomp (in this repository, not a submodule) already carries the Apple ARM64 fiber fix.
 
 Keep EBOOT.BIN and game.iso in the repository root. The launcher sets PSP2I_DATA
 and the working directory to that folder. psp2i.ini contains:
