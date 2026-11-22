@@ -73,6 +73,7 @@
 #include <psprecomp/net.h>
 
 #include "recomp_funcs.h"
+#include "savecrypt.h"
 #include "input_sdl.h"
 #include "audio_sdl.h"
 #include "atrac_at3.h"
@@ -2502,6 +2503,7 @@ static int boot_guest(const char *eboot, const char *iso, const char *root, cons
            mi->name, mi->entry, mi->gp, mi->load_lo, mi->load_hi);
 
     psp_hle_init();
+    savecrypt_install();                                     /* PSP/PPSSPP saves: encrypted as on hardware */
     psp_io_set_root(root);
     {
         const char *e = getenv("PSP2I_VFPU_NOINLINE");     /* A/B: runtime VFPU calls only */

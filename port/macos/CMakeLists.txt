@@ -23,7 +23,13 @@ add_executable(psp2i ${PORT}/host/sdl_main.c ${PORT}/host/gl_ge.c ${PORT}/host/p
     ${PORT}/host/gl_load.c ${PORT}/host/atrac_at3.c ${PORT}/host/camera.c
     ${PORT}/host/framerate.c ${PORT}/host/menu.c ${GEN_PARTS} ${PORT}/gen/recomp_imports.c)
 target_include_directories(psp2i PRIVATE ${PORT}/host ${PORT}/gen ${SPLIT_DIR})
-target_link_libraries(psp2i PRIVATE psprecomp SDL3::SDL3)
+include(${PORT}/savecrypt.cmake)
+target_link_libraries(psp2i PRIVATE psprecomp psp2i_savecrypt SDL3::SDL3)
+
+enable_testing()   # PSP savedata crypto against a PPSSPP-written PARAM.SFO (port/tests/data)
+add_executable(test_savecrypt EXCLUDE_FROM_ALL ${PORT}/tests/test_savecrypt.c)
+target_link_libraries(test_savecrypt PRIVATE psp2i_savecrypt)
+add_test(NAME test_savecrypt COMMAND test_savecrypt ${PORT}/tests/data/savecrypt_param.sfo)
 if(TARGET psp2i_atrac)
     add_dependencies(psp2i psp2i_atrac)
     add_custom_command(TARGET psp2i POST_BUILD COMMAND ${CMAKE_COMMAND} -E

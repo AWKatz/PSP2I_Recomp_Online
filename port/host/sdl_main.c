@@ -63,6 +63,7 @@
 #include "gl_ge.h"
 #include "gl_load.h"
 #include "menu.h"
+#include "savecrypt.h"
 #ifdef PSPRECOMP_MMO_NET
 #include "mmo_client.h"
 #endif
@@ -896,6 +897,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "module '%s': entry 0x%08X, gp 0x%08X\n", mi.name, mi.entry, mi.gp);
 
     psp_hle_init();
+    savecrypt_install();                                     /* PSP/PPSSPP saves: encrypted as on hardware */
     psp_io_set_root(root);
     psp_net_set_log(net_line);
     psp_net_set_forced_off(1);                               /* no online play: the WLAN switch reads off */

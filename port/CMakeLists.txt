@@ -56,7 +56,8 @@ add_executable(psp2i
     gen/recomp_imports.c
 )
 target_include_directories(psp2i PRIVATE gen ${PSPRECOMP_DIR}/tools/allegrexrecomp)
-target_link_libraries(psp2i PRIVATE psprecomp)
+include(${CMAKE_CURRENT_SOURCE_DIR}/savecrypt.cmake)
+target_link_libraries(psp2i PRIVATE psprecomp psp2i_savecrypt)
 
 if(MSVC)
     # The generated translation unit is ~200 MB of C. /bigobj for its section
