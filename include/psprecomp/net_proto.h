@@ -20,7 +20,19 @@ enum {
     MSG_S2C_HANDSHAKE_ACK = 0x8001,
     MSG_LAN_PROBE         = 0x0002,   /* UDP broadcast to PSP_MMO_LAN_PORT */
     MSG_LAN_REPLY         = 0x8002,
+    MSG_C2S_ENEMY_KILLED  = 0x0010,   /* a player killed an enemy: the server rolls the loot */
+    MSG_S2C_SPAWN_DROP    = 0x8010,   /* to every player: a drop appears */
+    MSG_S2C_KILL_REWARD   = 0x8011,   /* to the killer: experience and type points */
 };
+
+/* MSG_C2S_ENEMY_KILLED: hdr, enemy id u32, mission id u32, x/y/z f32 */
+enum { PSP_MMO_ENEMY_KILLED_LEN = 8 + 4 + 4 + 12 };
+/* MSG_S2C_SPAWN_DROP: hdr, drop id u64, enemy id u32, item id u32 (0 = Meseta),
+ * meseta u32, flags u32 (PSP_MMO_DROP_*), x/y/z f32, killer session u64 */
+enum { PSP_MMO_SPAWN_DROP_LEN = 8 + 8 + 4 + 4 + 4 + 4 + 12 + 8 };
+enum { PSP_MMO_DROP_RARE = 1 };
+/* MSG_S2C_KILL_REWARD: hdr, enemy id u32, exp u32, type points u32 */
+enum { PSP_MMO_KILL_REWARD_LEN = 8 + 4 + 4 + 4 };
 
 #define PSP_MMO_LAN_PORT    29000     /* LAN discovery (UDP) */
 /* What a server and client must agree on to play together; its FNV-1a hash

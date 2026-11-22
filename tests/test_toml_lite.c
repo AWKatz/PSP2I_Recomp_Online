@@ -30,6 +30,12 @@ int main(void) {
     CHECK(strcmp(toml_get_str(&d, "missing", "def"), "def") == 0);
     toml_free(&d);
 
+    CHECK(toml_parse("r = 1.5\ns = -2e3\nt = 3\nu = 0.25e1\n", &d) == 0);
+    CHECK(toml_get_float(&d, "r", 0) == 1.5 && toml_get_float(&d, "s", 0) == -2000.0);
+    CHECK(toml_get_float(&d, "t", 0) == 3.0 && toml_get_float(&d, "u", 0) == 2.5 && toml_get_float(&d, "x", 7.0) == 7.0);
+    CHECK(toml_get_int(&d, "r", 9) == 9);                       /* a float is not an int */
+    toml_free(&d);
+    CHECK(!parses("a = 1.\n") && !parses("a = 1.5x\n") && !parses("a = 1e\n"));
     CHECK(!parses("a = [1, 2]\n"));
     CHECK(!parses("a = \"unterminated\n"));
     CHECK(!parses("a = 1 2\n"));

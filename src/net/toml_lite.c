@@ -81,11 +81,31 @@ static int parse_line(toml_doc *d, const char *p, int line, char *section, int *
             if (*p != '_') { if (n + 1 >= sizeof digits) return fail(d, line, "number too long"); digits[n++] = *p; }
             p++;
         }
+        int is_float = 0;
+        if (*p == '.' || *p == 'e' || *p == 'E') {                /* a float: fraction and/or exponent */
+            if (*p == '.') {
+                digits[n++] = *p++;
+                if (!isdigit((unsigned char)*p)) return fail(d, line, "bad number");
+                while (isdigit((unsigned char)*p) || *p == '_') {
+                    if (*p != '_') { if (n + 1 >= sizeof digits) return fail(d, line, "number too long"); digits[n++] = *p; }
+                    p++;
+                }
+            }
+            if (*p == 'e' || *p == 'E') {
+                if (n + 3 >= sizeof digits) return fail(d, line, "number too long");
+                digits[n++] = 'e'; p++;
+                if (*p == '-' || *p == '+') digits[n++] = *p++;
+                if (!isdigit((unsigned char)*p)) return fail(d, line, "bad number");
+                while (isdigit((unsigned char)*p)) { if (n + 1 >= sizeof digits) return fail(d, line, "number too long"); digits[n++] = *p++; }
+            }
+            is_float = 1;
+        }
         digits[n] = 0;
-        if (!rest_ok(p)) return fail(d, line, "unsupported value (only strings, integers, booleans)");
-        e->type = TOML_INT; e->i = strtoll(digits, NULL, 10);
+        if (!rest_ok(p)) return fail(d, line, "unsupported value (only strings, numbers, booleans)");
+        if (is_float) { e->type = TOML_FLOAT; e->f = strtod(digits, NULL); }
+        else { e->type = TOML_INT; e->i = strtoll(digits, NULL, 10); }
     } else {
-        return fail(d, line, "unsupported value (only strings, integers, booleans)");
+        return fail(d, line, "unsupported value (only strings, numbers, booleans)");
     }
     d->count++;
     return 0;
@@ -145,3 +165,10 @@ static const toml_entry *find(const toml_doc *d, const char *key, int type) {
 const char *toml_get_str(const toml_doc *d, const char *key, const char *def) { const toml_entry *e = find(d, key, TOML_STRING); return e ? e->str : def; }
 int64_t     toml_get_int(const toml_doc *d, const char *key, int64_t def)     { const toml_entry *e = find(d, key, TOML_INT);    return e ? e->i : def; }
 int         toml_get_bool(const toml_doc *d, const char *key, int def)        { const toml_entry *e = find(d, key, TOML_BOOL);   return e ? (int)e->i : def; }
+
+double toml_get_float(const toml_doc *d, const char *key, double def) {
+    const toml_entry *e = find(d, key, TOML_FLOAT);
+    if (e) return e->f;
+    e = find(d, key, TOML_INT);
+    return e ? (double)e->i : def;
+}
