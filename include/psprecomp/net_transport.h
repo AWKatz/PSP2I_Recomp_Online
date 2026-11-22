@@ -54,21 +54,23 @@ typedef void (*psp_net_packet_fn)(const psp_net_packet *pkt, void *user);
 
 typedef struct {
     const char *name;
+    void       *ctx;       /* the instance; passed back as each call's first argument */
     /* Bring the transport up; self = this machine's game MAC. */
-    int  (*initialize)(const uint8_t self_mac[6]);
+    int  (*initialize)(void *ctx, const uint8_t self_mac[6]);
     /* Host a session (group name as the game gives it, max players). */
-    int  (*host_session)(const char *group, int max_players);
+    int  (*host_session)(void *ctx, const char *group, int max_players);
     /* Join a session at address ("host:port"), or by group name on LAN. */
-    int  (*join_session)(const char *address, const char *group);
+    int  (*join_session)(void *ctx, const char *address, const char *group);
     /* Send to one peer (or every peer: to == NULL). */
-    int  (*send_packet)(const psp_net_peer *to, int channel, uint16_t port,
+    int  (*send_packet)(void *ctx, const psp_net_peer *to, int channel, uint16_t port,
                         const void *data, uint32_t len);
     /* Deliver pending packets to fn; returns how many, or a PSP_NET_ERR_*. */
-    int  (*poll_packets)(psp_net_packet_fn fn, void *user);
-    void (*shutdown)(void);
+    int  (*poll_packets)(void *ctx, psp_net_packet_fn fn, void *user);
+    void (*shutdown)(void *ctx);
 } psp_net_transport;
 
-/* Install a transport (NULL = the null transport). The pointer must outlive use. */
+/* Install the transport the HLE layer uses (NULL = the null transport). The
+ * pointer must outlive use; the previous transport is shut down. */
 void psp_net_set_transport(const psp_net_transport *t);
 /* The current transport; never NULL. */
 const psp_net_transport *psp_net_get_transport(void);

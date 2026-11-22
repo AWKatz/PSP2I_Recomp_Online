@@ -60,4 +60,8 @@ if(ENABLE_MMO_NET)
     add_executable(test_net_transport test_net_transport.c)
     target_link_libraries(test_net_transport PRIVATE psprecomp)
     add_test(NAME net_transport COMMAND test_net_transport)
+
+    add_executable(test_enet_transport test_enet_transport.c)
+    target_link_libraries(test_enet_transport PRIVATE psprecomp)
+    add_test(NAME enet_transport COMMAND test_enet_transport)
 endif()

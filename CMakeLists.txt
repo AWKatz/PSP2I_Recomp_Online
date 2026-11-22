@@ -69,8 +69,24 @@ target_include_directories(psprecomp PUBLIC
 # repo passes -DENABLE_MMO_NET=ON; the option is shared through the cache.
 option(ENABLE_MMO_NET "Build the MMO network transport layer" OFF)
 if(ENABLE_MMO_NET)
-    target_sources(psprecomp PRIVATE src/net/transport.c)
+    # ENet (MIT), built from source and linked statically: no runtime dependency.
+    include(FetchContent)
+    FetchContent_Declare(enet
+        GIT_REPOSITORY https://github.com/lsalzman/enet.git
+        GIT_TAG        2662c0de09e36f2a2030ccc2c528a3e4c9e8138a   # v1.3.18
+        GIT_SHALLOW    FALSE)
+    FetchContent_MakeAvailable(enet)
+    target_include_directories(enet PUBLIC ${enet_SOURCE_DIR}/include)
+    if(WIN32)
+        target_link_libraries(enet PUBLIC ws2_32 winmm)
+    endif()
+    if(NOT MSVC)
+        target_compile_options(enet PRIVATE -w)   # third-party: not our warnings
+    endif()
+
+    target_sources(psprecomp PRIVATE src/net/transport.c src/net/enet_transport.c)
     target_compile_definitions(psprecomp PUBLIC PSPRECOMP_MMO_NET=1)
+    target_link_libraries(psprecomp PUBLIC enet)
 endif()
 
 # Networking HLE (src/hle/net.c) uses the host's sockets and adapter list.
