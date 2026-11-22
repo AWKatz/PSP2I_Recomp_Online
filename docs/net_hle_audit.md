@@ -359,3 +359,26 @@ In the MMO build only:
 - DNAS is not involved: PSP2i's ad hoc mode does not import it.
 - Checked by `psprecomp/tests/test_mmo_handshake.c`, which goes through the real
   dispatcher. `tests/mmo_listen` is a stand-in server for checks in the live game.
+
+### Checked in the live game (2026-11-22)
+
+The setup was the MMO build, a PPSSPP save loaded through `port/host/savecrypt.c`, and `mmo_listen 29001` running locally.
+
+1. The mode select showed **WLAN/WIRELESS: ON**.
+2. Choosing **Multi Mode** made the game call the following, in order:
+
+   ```
+   sceNetInit
+   sceNetAdhocInit(0x60000, 0x28, 0)                          -> 0
+   sceNetAdhocctlInit(stack 0x1000, prio 48, product 'NPJH50332')
+     -> joined 127.0.0.1:29001, sent MSG_C2S_HANDSHAKE (78 bytes)
+   sceNetAdhocctlAddHandler(0x08B87BF0, 0, 0x08EA16EC)        -> 0x80020001 (not implemented)
+   MSG_S2C_HANDSHAKE_ACK status 0, session 2
+   ```
+
+3. `mmo_listen` logged `MSG_C2S_HANDSHAKE from id 2 ... name 'Tester'`.
+4. The game reached the Matching Counter (Form Party / Join Party).
+
+`sceNetAdhocctlAddHandler` is the first call that isn't implemented yet. The game registers its ad hoc event callback there. Implementing it, together with the connect, scan and matching calls behind Form Party and Join Party, is the next piece of client-side ad hoc work.
+
+Each network log line appears twice in `logs/psp2i_log.txt`. That's a cosmetic issue in the host's log sink, not two separate calls.
