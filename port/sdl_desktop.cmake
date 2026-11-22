@@ -59,6 +59,11 @@ if(PSP2I_LIBAV)
     target_link_libraries(video_decode PRIVATE psp2i_video)
 endif()
 
+# The dedicated server, next to the game (-DBUILD_DEDICATED_SERVER=ON).
+if(BUILD_DEDICATED_SERVER)
+    add_subdirectory(${PORT}/../server ${CMAKE_BINARY_DIR}/server)
+endif()
+
 # Install layout (Linux packages, the Flatpak): the game and the ATRAC
 # decoder side by side in bin/ (psp2i loads it from its own folder).
 include(GNUInstallDirs)

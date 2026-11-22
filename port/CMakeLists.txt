@@ -57,6 +57,9 @@ add_executable(psp2i
 )
 target_include_directories(psp2i PRIVATE gen ${PSPRECOMP_DIR}/tools/allegrexrecomp)
 include(${CMAKE_CURRENT_SOURCE_DIR}/savecrypt.cmake)
+if(BUILD_DEDICATED_SERVER)   # the dedicated server, next to the game
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../server ${CMAKE_BINARY_DIR}/server)
+endif()
 target_link_libraries(psp2i PRIVATE psprecomp psp2i_savecrypt)
 
 if(MSVC)

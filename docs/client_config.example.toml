@@ -1,5 +1,13 @@
-# PSP2i MMO client (ENABLE_MMO_NET builds)
-server_ip     = "127.0.0.1"
-server_port   = 29001
-lan_discovery = true
-player_name   = "Tester"
+# PSP2i MMO client (ENABLE_MMO_NET builds): client_config.toml next to the game data.
+
+# The server to join. Leave server_ip out (or empty) to find one on the LAN.
+# server_ip   = "192.168.1.20"
+server_port    = 29001
+
+# With no server_ip: broadcast a probe and join the first psp2i_server --lan
+# that answers with the same version hash. Falls back to 127.0.0.1.
+lan_discovery  = true
+discovery_port = 29000
+
+# Sent in the handshake: printable UTF-8, at most 31 bytes.
+player_name    = "Tester"
