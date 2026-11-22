@@ -64,6 +64,15 @@ target_include_directories(psprecomp PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+# Multiplayer (MMO) networking: the ad hoc transport seam. Off by default, so
+# the single-player runtime is built from exactly the sources above. A game
+# repo passes -DENABLE_MMO_NET=ON; the option is shared through the cache.
+option(ENABLE_MMO_NET "Build the MMO network transport layer" OFF)
+if(ENABLE_MMO_NET)
+    target_sources(psprecomp PRIVATE src/net/transport.c)
+    target_compile_definitions(psprecomp PUBLIC PSPRECOMP_MMO_NET=1)
+endif()
+
 # Networking HLE (src/hle/net.c) uses the host's sockets and adapter list.
 if(WIN32)
     target_link_libraries(psprecomp PUBLIC ws2_32 iphlpapi)

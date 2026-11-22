@@ -504,6 +504,15 @@ static void hle_NetconfShutdownStart(void) {
     psp_ret(0);
 }
 
+/* ---- imports with no implementation yet --------------------------------------------- */
+/* PSP2i imports these; before they were registered, the dispatcher's fallback answered
+ * them with 0. That answer is kept (single-player parity) but each call is now logged
+ * from the network layer, so the MMO work can see which ones the game reaches. */
+static void hle_NetUnmapped(void) {
+    net_log("unimplemented network call (args 0x%08X 0x%08X) -> 0", psp_arg(0), psp_arg(1));
+    psp_ret(0);
+}
+
 /* ---- registration ---------------------------------------------------------------- */
 
 void psp_net_register(void) {
@@ -546,4 +555,14 @@ void psp_net_register(void) {
     psp_hle_register(0x91E70E35, "sceUtility", "sceUtilityNetconfUpdate",        hle_NetconfUpdate);
     psp_hle_register(0x6332AA39, "sceUtility", "sceUtilityNetconfGetStatus",     hle_NetconfGetStatus);
     psp_hle_register(0xF88155F6, "sceUtility", "sceUtilityNetconfShutdownStart", hle_NetconfShutdownStart);
+
+    /* imported by PSP2i, not implemented: see hle_NetUnmapped. Names unverified. */
+    psp_hle_register(0xCC393E48, "sceNet",         "sceNetGetLocalEtherAddr", hle_NetUnmapped);
+    psp_hle_register(0x162E6FD5, "sceNetInet",     "sceNetInetGetsockname",   hle_NetUnmapped);
+    psp_hle_register(0xE247B6D6, "sceNetInet",     "sceNetInetGetpeername",   hle_NetUnmapped);
+    psp_hle_register(0xB3888AD4, "sceNetInet",     "sceNetInetGetTcpcbstat",  hle_NetUnmapped);
+    psp_hle_register(0x168B8DE5, "sceNpService",   NULL, hle_NetUnmapped);
+    psp_hle_register(0x78802D5F, "sceNpService",   NULL, hle_NetUnmapped);
+    psp_hle_register(0x1DA3E950, "sceNpService",   NULL, hle_NetUnmapped);
+    psp_hle_register(0x3892E9A6, "sceNpMatching2", NULL, hle_NetUnmapped);
 }
