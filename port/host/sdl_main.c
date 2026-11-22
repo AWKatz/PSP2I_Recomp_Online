@@ -63,6 +63,9 @@
 #include "gl_ge.h"
 #include "gl_load.h"
 #include "menu.h"
+#ifdef PSPRECOMP_MMO_NET
+#include "mmo_client.h"
+#endif
 
 #include <math.h>
 #include <stdio.h>
@@ -573,6 +576,9 @@ static void on_vblank(void) {
     if (!g_menu.rs_on) rx = ry = 128;                    /* CONTROLS > RIGHT STICK off: no camera */
     psp_ctrl_set(game, ax, ay);
     camera_set_stick(rx, ry);
+#ifdef PSPRECOMP_MMO_NET
+    mmo_client_frame();
+#endif
     present();
 }
 
@@ -893,6 +899,9 @@ int main(int argc, char **argv) {
     psp_io_set_root(root);
     psp_net_set_log(net_line);
     psp_net_set_forced_off(1);                               /* no online play: the WLAN switch reads off */
+#ifdef PSPRECOMP_MMO_NET
+    mmo_client_init(g_base);                                 /* MMO build: the network back on, through the server */
+#endif
     psp_sysmem_set_heap(mi.load_hi, USER_PARTITION_TOP);
     psp_recomp_register();
     psp_audio_set_sink(audio_sink);
@@ -930,6 +939,9 @@ int main(int argc, char **argv) {
     fprintf(stderr, "starting module_start at 0x%08X (%d fps)\n", mi.entry, fps);
     const int rc = psp_sched_run(mi.entry, (uint32_t)sizeof boot_path, argp, 0x20, 0x40000, mi.gp);
     fprintf(stderr, "psp2i: the game ended (%d)\n", rc);
+#ifdef PSPRECOMP_MMO_NET
+    mmo_client_shutdown();
+#endif
 
     for (int i = 0; i < AUDIO_CHANNELS; i++) if (g_stream[i]) SDL_DestroyAudioStream(g_stream[i]);
     for (int i = 0; i < MAX_PADS; i++) if (g_pad[i]) SDL_CloseGamepad(g_pad[i]);

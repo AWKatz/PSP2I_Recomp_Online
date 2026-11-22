@@ -1,0 +1,5 @@
+# PSP2i MMO client (ENABLE_MMO_NET builds)
+server_ip     = "127.0.0.1"
+server_port   = 29001
+lan_discovery = true
+player_name   = "Tester"

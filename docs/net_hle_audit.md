@@ -35,16 +35,21 @@ is off" check before it reaches any ad hoc or Inet call.
 
 These were imported by the game and answered only by the fallback (return 0).
 They are now registered in `net.c` as `hle_NetUnmapped`, which logs the call
-and returns 0, so behaviour is unchanged. The names are best-effort and **unverified**:
+and returns 0, so behaviour is unchanged. The sceNet/sceNetInet names are confirmed:
+`test_hle` checks SHA-1(name) against each NID. The NP ones are unidentified and
+registered unnamed.
 
-| Library | NID | Likely name |
+| Library | NID | Name |
 |---|---|---|
-| sceNet | 0xCC393E48 | sceNetGetLocalEtherAddr |
+| sceNet | 0xCC393E48 | sceNetGetMallocStat |
 | sceNetInet | 0x162E6FD5 | sceNetInetGetsockname |
 | sceNetInet | 0xE247B6D6 | sceNetInetGetpeername |
 | sceNetInet | 0xB3888AD4 | sceNetInetGetTcpcbstat |
 | sceNpService | 0x168B8DE5, 0x78802D5F, 0x1DA3E950 | unknown |
 | sceNpMatching2 | 0x3892E9A6 | unknown |
+
+(Task 1.1 first registered 0xCC393E48 under a guessed name, sceNetGetLocalEtherAddr.
+`test_hle` caught the mismatch, and Task 1.3 corrected it.)
 
 ## Ad hoc prototypes (what Task 1.2 must implement)
 
@@ -187,7 +192,7 @@ runtime's source list is the same as before.
 | sceNet | `sceNetEtherNtostr` | `0x89360950` | hle_NetEtherNtostr | net.c | yes |
 | sceNet | `sceNetEtherStrton` | `0xD27961C9` | hle_NetEtherStrton | net.c | yes |
 | sceNet | `sceNetFreeThreadinfo` | `0x50647530` | hle_NetFreeThreadinfo | net.c | yes |
-| sceNet | `sceNetGetLocalEtherAddr` | `0xCC393E48` | hle_NetUnmapped | net.c | yes |
+| sceNet | `sceNetGetMallocStat` | `0xCC393E48` | hle_NetUnmapped | net.c | yes |
 | sceNet | `sceNetInit` | `0x39AF39A6` | hle_NetInit | net.c | yes |
 | sceNet | `sceNetTerm` | `0x281928A9` | hle_NetTerm | net.c | yes |
 | sceNetAdhoc | `sceNetAdhocGetPdpStat` | `0xC7C1FC57` | fail (0x80020001) | offline.c | yes |
@@ -336,3 +341,21 @@ runtime's source list is the same as before.
 | sceUtility | `sceUtilityPsnUpdate` | `0x0940A1B9` | fail (0x80020001) | offline.c | yes |
 | sceWlanDrv | `sceWlanGetEtherAddr` | `0x0C622081` | hle_WlanGetEtherAddr | net.c | yes |
 | sceWlanDrv | `sceWlanGetSwitchState` | `0xD7763699` | hle_WlanGetSwitchState | net.c | yes |
+
+
+## MMO client entry (Task 1.3)
+
+In the MMO build only:
+
+- `port/host/mmo_client.c` reads `client_config.toml` from the data folder
+  (`server_ip`, `server_port`, `lan_discovery`, `player_name`; see
+  `docs/client_config.example.toml`), installs the ENet transport, clears the
+  forced-offline flag and forces the WLAN switch on (`psp_net_set_wlan_forced_on`).
+- `psprecomp/src/net/adhoc_mmo.c` replaces every stub in `offline.c` (ad hoc,
+  NP, PSN dialog) with a traced version that logs the name and arguments and
+  keeps the same result. The exception is `sceNetAdhocctlInit`: it joins the
+  server and sends `MSG_C2S_HANDSHAKE` (`include/psprecomp/net_proto.h`). The
+  server's `MSG_S2C_HANDSHAKE_ACK` is read by `psp_net_mmo_pump`, which runs every frame.
+- DNAS is not involved: PSP2i's ad hoc mode does not import it.
+- Checked by `psprecomp/tests/test_mmo_handshake.c`, which goes through the real
+  dispatcher. `tests/mmo_listen` is a stand-in server for checks in the live game.

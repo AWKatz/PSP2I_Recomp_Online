@@ -30,6 +30,10 @@ if(TARGET psp2i_atrac)
         copy_if_different $<TARGET_FILE:psp2i_atrac> $<TARGET_FILE_DIR:psp2i>)
 endif()
 
+if(ENABLE_MMO_NET)   # psprecomp's option: the MMO client start-up
+    target_sources(psp2i PRIVATE ${PORT}/host/mmo_client.c)
+endif()
+
 option(PSP2I_LIBAV "Decode movie video with FFmpeg" ON)
 if(PSP2I_LIBAV)
     find_path(AVCODEC_INCLUDE_DIR libavcodec/avcodec.h REQUIRED)
