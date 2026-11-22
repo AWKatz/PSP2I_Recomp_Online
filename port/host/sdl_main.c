@@ -64,6 +64,7 @@
 #include "gl_load.h"
 #include "menu.h"
 #include "savecrypt.h"
+#include "texpack.h"
 #ifdef PSPRECOMP_MMO_NET
 #include "mmo_client.h"
 #endif
@@ -928,6 +929,13 @@ int main(int argc, char **argv) {
 
     psp_hle_init();
     savecrypt_install();                                     /* PSP/PPSSPP saves: encrypted as on hardware */
+    {                                                        /* HD textures: a PPSSPP pack, if there is one */
+        char dir[1200];
+        const char *env = getenv("PSP2I_TEXTURES");
+        if (env && *env) snprintf(dir, sizeof dir, "%s", env);
+        else snprintf(dir, sizeof dir, "%s/TEXTURES/NPJH50332", g_base);
+        if (texpack_init(dir) == 0) gl_ge_set_texture_pack(texpack_lookup);
+    }
     psp_io_set_root(root);
     psp_net_set_log(net_line);
     psp_net_set_forced_off(1);                               /* no online play: the WLAN switch reads off */

@@ -35,7 +35,12 @@ psp2i.ini                             iso=game.iso  (path to your disc image; al
 GameData/flash/font/*.pgf             PSP firmware fonts (without them, menu text is missing)
 GameData/ms/PSP/SAVEDATA/NPJH50332/   your save: copy PPSSPP's memstick/PSP/SAVEDATA/NPJH50332 folder as is
 client_config.toml                    MMO builds only (see below)
+TEXTURES/NPJH50332/textures.ini + PNGs  an HD texture pack made for PPSSPP (macOS, Linux, Android)
 ```
+
+HD textures use PPSSPP's pack format and hashing, so PPSSPP packs work as they are: copy the whole `memstick/PSP/TEXTURES/NPJH50332` folder, including its `textures.ini`. Two environment variables help:
+- `PSP2I_TEXTURES=DIR` uses a pack from somewhere else.
+- `PSP2I_TEXDUMP=1` writes every texture the pack doesn't replace to `<pack>/new/` (as `<hash>.png`, listed in `new/textures.ini`), which is how packs are made.
 
 PPSSPP and PSP saves load and save encrypted, so they work in both directions. In-game, Cross confirms.
 
@@ -165,6 +170,7 @@ Current capabilities include:
 * Infrastructure handling (Head to [psp2i discord](https://discord.gg/FeGvdBkrGa) for more info)
 * Official website loading
 * Linux and Steam Deck (Flatpak; untested so far)
+* HD texture packs in PPSSPP's format (SDL builds: macOS, Linux, Android; not the Windows Direct3D build yet)
 * PPSSPP and PSP saves load and save, encrypted as on hardware
 * **Online (this fork):**
   * MMO client build: the game's ad hoc Multi Mode joins a server over ENet. The server is set in `client_config.toml` or found on the LAN automatically.

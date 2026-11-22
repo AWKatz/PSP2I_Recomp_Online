@@ -61,6 +61,7 @@ static float    g_bone[8 * 12];
 static uint32_t g_world_i, g_view_i, g_proj_i, g_tgen_i, g_bone_i;
 static uint8_t  g_clut[1024];            /* the CLUT cache, filled by CLOAD */
 static uint64_t g_clut_hash;             /* FNV-1a of g_clut, updated by CLOAD */
+static uint32_t g_clut_total, g_clut_max; /* bytes the last CLOAD copied / the most any did */
 static uint64_t g_pixels;
 /* Profiling counters (rasterizer workload). */
 static uint64_t c_tested, c_shaded, c_textured, c_linear, c_sprite_px, c_tri_px, c_blend, c_clear;
@@ -86,6 +87,7 @@ void psp_gpu_reset(void) {
     g_world_i = g_view_i = g_proj_i = g_tgen_i = g_bone_i = 0;
     memset(g_clut, 0, sizeof g_clut);
     g_clut_hash = 0;
+    g_clut_total = g_clut_max = 0;
     /* Defaults where a zero register would be unusable rather than merely
      * unset: 8888 framebuffer, identity matrices, a full-screen scissor and
      * always-passing tests. Every game sets these explicitly. */
@@ -1830,6 +1832,16 @@ uint64_t psp_gpu_texture_hash(void) {
     return hsh;
 }
 
+void psp_gpu_texture_info(psp_gpu_tex_info *o) {
+    memset(o, 0, sizeof *o);
+    o->addr = tex_addr(0); o->w = tex_w(0); o->h = tex_h(0); o->bufw = tex_bufw(0);
+    o->dim = R[0xB8] & 0xF0F;
+    o->psm = (int)(R[0xC3] & 0xF); o->swz = (int)(R[0xC2] & 1);
+    o->clutfmt = R[0xC5] & 0xFFFFFF;
+    o->clut = g_clut;
+    o->clut_total = g_clut_total; o->clut_max = g_clut_max;
+}
+
 /* Bytes of the colour buffer the scissor can reach (for coherence hooks). */
 static uint32_t fb_span(void) { return ((uint32_t)g_sy1 + 1) * g_fbw * (g_psm == 3 ? 4u : 2u); }
 static uint32_t zb_span(void) { return ((uint32_t)g_sy1 + 1) * g_zbw * 2u; }
@@ -1982,6 +1994,8 @@ void psp_gpu_cmd(uint32_t cmd, uint32_t arg) {
         uint32_t src = (R[0xB0] & 0xFFFFF0u) | ((R[0xB1] & 0x0F0000u) << 8);
         uint8_t *p = mem(src, n);
         if (p && n <= sizeof g_clut) memcpy(g_clut, p, n);
+        g_clut_total = n <= sizeof g_clut ? n : (uint32_t)sizeof g_clut;
+        if (g_clut_total > g_clut_max) g_clut_max = g_clut_total;
         /* Hash the palette now, so the texture key can carry it (see
          * fill_hw_state): one CLUT4/8 image drawn with different palettes is
          * a different texture to a backend's cache. */

@@ -61,10 +61,12 @@ add_library(main SHARED
     ${PORT}/host/camera.c
     ${PORT}/host/framerate.c
     ${PORT}/host/menu.c
+    ${PORT}/host/texpack.c
     ${PORT}/host/postfx.c
     ${PORT}/host/h264_mediacodec.c
     ${GAME_SOURCES})
-target_include_directories(main PRIVATE ${PORT}/host ${PSP2I_GEN_DIR} ${CMAKE_BINARY_DIR}/gen_split)
+target_include_directories(main PRIVATE ${PORT}/host ${PSP2I_GEN_DIR} ${CMAKE_BINARY_DIR}/gen_split
+    ${PORT}/third_party/xxhash ${PORT}/third_party/stb)
 target_compile_definitions(main PRIVATE PSP2I_GLES)
 if(NOT HAVE_GAME_CODE)
     target_compile_definitions(main PRIVATE PSP2I_NO_GAME_CODE)

@@ -24,6 +24,9 @@ int  gl_draw_overlay(const uint32_t *px, int w, int h, int x, int y, int vw, int
 int  gl_blit_frame(const uint32_t *px, int w, int h, int x, int y, int vw, int vh, int cw, int ch);
 void gl_ge_report(FILE *out);
 /* Texture replacement: fn(pixel address) -> RGBA (w x h) or NULL; gen() changes when the images do. */
+/* HD texture packs: fn gets each newly decoded texture (RGBA8, the GE size)
+ * and returns a replacement of any size, or NULL. */
+void gl_ge_set_texture_pack(const unsigned char *(*fn)(const unsigned int *orig, int *w, int *h));
 void gl_ge_set_texture_source(const unsigned char *(*fn)(unsigned addr, int *w, int *h), unsigned (*gen)(void));
 void gl_ge_state_counts(uint64_t *made, uint64_t *skipped);
 void gl_ge_state_reset(void);           /* GL state was set outside gl_ge.c (its cache is stale) */

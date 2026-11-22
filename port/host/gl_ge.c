@@ -314,7 +314,8 @@ typedef struct {
 typedef struct {
     int used;
     uint64_t key, hash, check_frame, last_use;
-    uint32_t w, h;
+    uint32_t w, h;                               /* the GE texture's size */
+    uint32_t gw, gh;                             /* the GL texture's (bigger for an HD replacement) */
     GLuint tex;
 } tex_entry;
 
@@ -909,6 +910,13 @@ static tex_entry *tex_replacement(const psp_gpu_state *st) {
     return &e;
 }
 
+/* HD texture packs (gl_ge_set_texture_pack): asked whenever a texture is
+ * decoded (new, or its pixels changed) for a replacement of any size. UVs
+ * are normalised by the GE size (texture_view), so a bigger image maps the
+ * same. */
+static const uint8_t *(*g_tex_pack)(const uint32_t *orig, int *w, int *h);
+void gl_ge_set_texture_pack(const uint8_t *(*fn)(const uint32_t *orig, int *w, int *h)) { g_tex_pack = fn; }
+
 static tex_entry *tex_get(const psp_gpu_state *st) {
     if (g_tex_source) {
         tex_entry *r = tex_replacement(st);
@@ -926,16 +934,23 @@ static tex_entry *tex_get(const psp_gpu_state *st) {
             for (int i = 1; i < MAX_TEX; i++) if (g_tex[i].last_use < e->last_use) e = &g_tex[i];
         }
         const int evicted = e->used;
-        if (e->used && (e->w != st->tex_w || e->h != st->tex_h)) { glDeleteTextures(1, &e->tex); e->tex = 0; }
-        if (!e->tex) e->tex = new_texture(st->tex_w, st->tex_h);
         e->key = st->tex_key; e->w = st->tex_w; e->h = st->tex_h; e->used = 1;
         if (evicted) tex_index_rebuild(); else tex_index_add((int)(e - g_tex));
     }
     uint32_t *px = (uint32_t *)malloc((size_t)st->tex_w * st->tex_h * 4);
     if (!px) return NULL;
     psp_gpu_decode_texture(px);
+    const void *up = px;
+    int uw = (int)st->tex_w, uh = (int)st->tex_h;
+    if (g_tex_pack) {
+        int rw = 0, rh = 0;
+        const uint8_t *rep = g_tex_pack(px, &rw, &rh);
+        if (rep && rw > 0 && rh > 0 && rw <= 8192 && rh <= 8192) { up = rep; uw = rw; uh = rh; n_tex_replaced++; }
+    }
+    if (e->tex && (e->gw != (uint32_t)uw || e->gh != (uint32_t)uh)) { glDeleteTextures(1, &e->tex); e->tex = 0; }
+    if (!e->tex) { e->tex = new_texture((uint32_t)uw, (uint32_t)uh); e->gw = (uint32_t)uw; e->gh = (uint32_t)uh; }
     glBindTexture(GL_TEXTURE_2D, e->tex);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, (GLsizei)st->tex_w, (GLsizei)st->tex_h, GL_RGBA, GL_UNSIGNED_BYTE, px);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, (GLsizei)uw, (GLsizei)uh, GL_RGBA, GL_UNSIGNED_BYTE, up);
     free(px);
     e->hash = h; e->check_frame = f; e->last_use = ++g_use;
     n_tex_decodes++;

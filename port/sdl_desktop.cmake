@@ -24,8 +24,9 @@ file(GLOB GEN_PARTS ${SPLIT_DIR}/recomp_part_*.c)
 set_source_files_properties(${GEN_PARTS} PROPERTIES COMPILE_OPTIONS "-O1;-g0")
 add_executable(psp2i ${PORT}/host/sdl_main.c ${PORT}/host/gl_ge.c ${PORT}/host/postfx.c
     ${PORT}/host/gl_load.c ${PORT}/host/atrac_at3.c ${PORT}/host/camera.c
-    ${PORT}/host/framerate.c ${PORT}/host/menu.c ${GEN_PARTS} ${PSP2I_GEN_DIR}/recomp_imports.c)
-target_include_directories(psp2i PRIVATE ${PORT}/host ${PSP2I_GEN_DIR} ${SPLIT_DIR})
+    ${PORT}/host/framerate.c ${PORT}/host/menu.c ${PORT}/host/texpack.c ${GEN_PARTS} ${PSP2I_GEN_DIR}/recomp_imports.c)
+target_include_directories(psp2i PRIVATE ${PORT}/host ${PSP2I_GEN_DIR} ${SPLIT_DIR}
+    ${PORT}/third_party/xxhash ${PORT}/third_party/stb)
 include(${PORT}/savecrypt.cmake)
 target_link_libraries(psp2i PRIVATE psprecomp psp2i_savecrypt SDL3::SDL3)
 

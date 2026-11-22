@@ -200,4 +200,17 @@ void psp_gpu_decode_texture(uint32_t *out);
 /* For backends: a hash of the current texture's bytes (and CLUT). */
 uint64_t psp_gpu_texture_hash(void);
 
+/* The current texture (level 0) as the GE sees it, for texture packs that
+ * key textures the way PPSSPP does. clut_total: bytes the last CLOAD copied;
+ * clut_max: the most any CLOAD has copied. */
+typedef struct {
+    uint32_t addr, w, h, bufw;
+    uint32_t dim;                   /* texsize0 & 0xF0F: log2 w | log2 h << 8 */
+    int      psm, swz;
+    uint32_t clutfmt;               /* the CLUT format register (0xC5) */
+    const uint8_t *clut;            /* 1 KB of CLUT cache */
+    uint32_t clut_total, clut_max;
+} psp_gpu_tex_info;
+void psp_gpu_texture_info(psp_gpu_tex_info *out);
+
 #endif
