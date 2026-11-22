@@ -712,6 +712,19 @@ uint32_t psp_call_guest(uint32_t func, uint32_t a0, uint32_t a1, uint32_t a2) {
     return call_guest(func, a0, a1, a2, psp_cpu.r[PSP_REG_SP] - 0x40);
 }
 
+/* Five arguments ($a0-$a3, $t0), e.g. sceNetAdhocMatching's event callback. */
+uint32_t psp_call_guest5(uint32_t func, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
+    psp_cpu_state saved = psp_cpu;
+    psp_cpu.r[PSP_REG_A0] = a0; psp_cpu.r[PSP_REG_A1] = a1; psp_cpu.r[PSP_REG_A2] = a2;
+    psp_cpu.r[PSP_REG_A3] = a3; psp_cpu.r[PSP_REG_T0] = a4;
+    psp_cpu.r[PSP_REG_RA] = 0;
+    psp_cpu.r[PSP_REG_SP] = (saved.r[PSP_REG_SP] - 0x40) & ~15u;
+    psp_dispatch(func);
+    const uint32_t ret = psp_cpu.r[PSP_REG_V0];
+    psp_cpu = saved;
+    return ret;
+}
+
 /* Deliver every pending callback owned by `t`. Callbacks run on the owning
  * thread, below its current stack pointer. A nonzero return deletes the
  * callback, as on hardware. */

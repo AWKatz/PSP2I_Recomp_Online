@@ -12,6 +12,8 @@
  *     and its handler gets the CONNECT event (delivered between frames).
  * The rest of ad hoc (Matching, PDP/PTP, scanning for other groups) follows. */
 
+#include "adhoc_internal.h"
+
 #include "psprecomp/hle.h"
 #include "psprecomp/net.h"
 #include "psprecomp/net_proto.h"
@@ -158,9 +160,14 @@ static void hle_AdhocctlGetState(void) {
     psp_ret(0);
 }
 
+int mmo_net_ready(void) { return g_joined; }
+
 static void on_packet(const psp_net_packet *p, void *user) {
     (void)user;
-    if (p->port != PSP_MMO_CTRL_PORT) return;   /* game traffic: later tasks */
+    if (p->port != PSP_MMO_CTRL_PORT) {
+        if ((int)p->port == mmo_matching_port()) mmo_matching_on_packet(p);
+        return;                                   /* other game traffic (PDP/PTP): later */
+    }
     const uint16_t type = psp_mmo_type(p->data, p->len);
     if (type == MSG_S2C_HANDSHAKE_ACK && p->len >= PSP_MMO_HANDSHAKE_ACK_LEN) {
         const uint8_t *d = p->data + PSP_MMO_HDR_LEN;
@@ -175,9 +182,11 @@ static void on_packet(const psp_net_packet *p, void *user) {
 
 void psp_net_mmo_pump(void) {
     if (g_nevents) deliver_events();
-    if (!g_joined) return;
-    const psp_net_transport *t = psp_net_get_transport();
-    t->poll_packets(t->ctx, on_packet, NULL);
+    if (g_joined) {
+        const psp_net_transport *t = psp_net_get_transport();
+        t->poll_packets(t->ctx, on_packet, NULL);
+    }
+    mmo_matching_pump();
 }
 
 void psp_net_mmo_register(void) {
@@ -191,4 +200,5 @@ void psp_net_mmo_register(void) {
     psp_hle_register(0x6402490B, "sceNetAdhocctl", "sceNetAdhocctlDelHandler", hle_AdhocctlDelHandler);
     psp_hle_register(0x75ECD386, "sceNetAdhocctl", "sceNetAdhocctlGetState", hle_AdhocctlGetState);
     psp_net_set_adhoc_dialog(adhoc_dialog);
+    mmo_matching_register();
 }
