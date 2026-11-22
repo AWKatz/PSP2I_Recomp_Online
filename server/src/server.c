@@ -341,7 +341,7 @@ srv *srv_create(const srv_config *cfg) {
     if (!s) return NULL;
     s->cfg = *cfg;
     if (s->cfg.max_players < 1) s->cfg.max_players = 32;
-    if (s->cfg.max_players > MAX_SESSIONS - 1) s->cfg.max_players = MAX_SESSIONS - 1;
+    if (s->cfg.max_players > SRV_MAX_PLAYERS) s->cfg.max_players = SRV_MAX_PLAYERS;   /* the hub cap */
     if (!s->cfg.rate_pps) s->cfg.rate_pps = 120;
     if (!s->cfg.handshake_timeout_ms) s->cfg.handshake_timeout_ms = 5000;
     snprintf(s->name, sizeof s->name, "%s", s->cfg.name && *s->cfg.name ? s->cfg.name : "PSP2i Server");

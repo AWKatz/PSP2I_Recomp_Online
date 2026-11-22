@@ -57,7 +57,7 @@ cd server && ../build/server/psp2i_server --lan    # run it where config/ is, or
 | `--bind ADDR` | all interfaces | address to listen on |
 | `--lan-port N` | 29000 | LAN discovery port (UDP) |
 | `--name NAME` | PSP2i Server | name shown to LAN clients |
-| `--max-players N` | 32 | 1–63 |
+| `--max-players N` | 32 | 1–32: one lobby/hub holds at most 32 players |
 | `--rate-limit N` | 120 | online: packets per second per player (bursts up to 2x; kicked after 3 s over) |
 | `--handshake-timeout S` | 5 | seconds a new connection has to send its handshake |
 | `--kill-limit N` | 10 | enemy-kill reports per second per player |

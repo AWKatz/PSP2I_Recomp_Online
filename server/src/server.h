@@ -14,13 +14,16 @@ typedef struct db db;
 
 typedef enum { SRV_MODE_LAN, SRV_MODE_ONLINE } srv_mode;
 
+/* Players per server (one lobby / hub): the hard cap, also the default. */
+#define SRV_MAX_PLAYERS 32
+
 typedef struct {
     srv_mode    mode;
     const char *bind;                 /* NULL = all interfaces (0.0.0.0) */
     uint16_t    port;                 /* the game port (ENet); 0 = any free port */
     uint16_t    lan_port;             /* LAN mode: discovery (UDP); 0 = any free port */
     const char *name;                 /* shown to LAN clients */
-    int         max_players;          /* 1..63 */
+    int         max_players;          /* 1..SRV_MAX_PLAYERS (32) */
     uint32_t    rate_pps;             /* online: packets per second per player (burst 2x) */
     uint32_t    handshake_timeout_ms; /* a peer must send a valid handshake within this */
     void      (*log)(const char *line);

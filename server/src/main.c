@@ -63,7 +63,7 @@ static void usage(void) {
          "  --bind ADDR            address to bind (default: all interfaces)\n"
          "  --lan-port N           LAN discovery port, UDP (default 29000)\n"
          "  --name NAME            server name shown to LAN clients\n"
-         "  --max-players N        1..63 (default 32)\n"
+         "  --max-players N        1..32 (default 32: the hub cap)\n"
          "  --rate-limit N         online: packets per second per player (default 120, burst 2x)\n"
          "  --handshake-timeout S  seconds a new connection has to send its handshake (default 5)\n"
          "  --stats S              print a status line every S seconds (default 60, 0 = off)\n"
@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--bind")) { i = need(i, argc, a); cfg.bind = argv[i]; }
         else if (!strcmp(a, "--lan-port")) { i = need(i, argc, a); cfg.lan_port = (uint16_t)num(argv[i], a, 0, 65535); }
         else if (!strcmp(a, "--name")) { i = need(i, argc, a); cfg.name = argv[i]; }
-        else if (!strcmp(a, "--max-players")) { i = need(i, argc, a); cfg.max_players = (int)num(argv[i], a, 1, 63); }
+        else if (!strcmp(a, "--max-players")) { i = need(i, argc, a); cfg.max_players = (int)num(argv[i], a, 1, SRV_MAX_PLAYERS); }
         else if (!strcmp(a, "--rate-limit")) { i = need(i, argc, a); cfg.rate_pps = (uint32_t)num(argv[i], a, 1, 100000); }
         else if (!strcmp(a, "--handshake-timeout")) { i = need(i, argc, a); cfg.handshake_timeout_ms = (uint32_t)num(argv[i], a, 1, 3600) * 1000u; }
         else if (!strcmp(a, "--stats")) { i = need(i, argc, a); stats_s = num(argv[i], a, 0, 86400); }
