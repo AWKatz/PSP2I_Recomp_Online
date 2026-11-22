@@ -73,6 +73,10 @@ int  psp_offline_stub(int i, uint32_t *nid, const char **lib, const char **name,
 /* ---- MMO build (ENABLE_MMO_NET) ---------------------------------------------------- */
 /* Nonzero: the WLAN switch always reads on, whatever the host's connection. */
 void psp_net_set_wlan_forced_on(int on);
+/* The network dialog's ad hoc actions (2 connect, 4 create, 5 join): fn
+ * returns the dialog's result (0 = connected). Without one they fail. */
+void psp_net_set_adhoc_dialog(int (*fn)(int action, uint32_t param));
+
 #ifdef PSPRECOMP_MMO_NET
 typedef struct {
     const char *server;       /* "ip:port" the ad hoc layer joins */

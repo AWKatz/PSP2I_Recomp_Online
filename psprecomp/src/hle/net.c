@@ -466,6 +466,10 @@ enum { DLG_NONE = 0, DLG_INIT = 1, DLG_RUNNING = 2, DLG_FINISHED = 3, DLG_SHUTDO
 static int g_nc_status, g_nc_action, g_nc_polls;
 static uint32_t g_nc_param;
 
+/* The MMO build answers the dialog's ad hoc actions (2/4/5): result 0 or an error. */
+static int (*g_adhoc_dialog)(int action, uint32_t param);
+void psp_net_set_adhoc_dialog(int (*fn)(int action, uint32_t param)) { g_adhoc_dialog = fn; }
+
 static void hle_NetconfInitStart(void) {
     g_nc_param = psp_arg(0);
     g_nc_action = g_nc_param ? (int)psp_read32(g_nc_param + 0x30) : 0;
@@ -493,6 +497,8 @@ static void netconf_finish(void) {
             result = SCE_NET_APCTL_ERROR_WLAN_SWITCH_OFF;
             net_log("network dialog: no host network -- failed");
         }
+    } else if (g_adhoc_dialog) {
+        result = (uint32_t)g_adhoc_dialog(g_nc_action, g_nc_param);
     } else {
         result = SCE_NET_APCTL_ERROR_WLAN_SWITCH_OFF;
         net_log("network dialog: ad hoc is not available -- failed");

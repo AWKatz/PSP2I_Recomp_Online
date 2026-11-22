@@ -7,7 +7,10 @@
  *   - sceNetAdhocctlInit, the game's entry into multiplayer, brings the
  *     installed transport up, joins the configured server and sends
  *     MSG_C2S_HANDSHAKE.
- * The rest of ad hoc (PDP/PTP, Adhocctl groups, Matching) follows in later tasks. */
+ *   - sceNetAdhocctlAddHandler / DelHandler / GetState, and the network
+ *     dialog's ad hoc actions: the game's Form Party connects to its group
+ *     and its handler gets the CONNECT event (delivered between frames).
+ * The rest of ad hoc (Matching, PDP/PTP, scanning for other groups) follows. */
 
 #include "psprecomp/hle.h"
 #include "psprecomp/net.h"
@@ -79,6 +82,82 @@ static void hle_AdhocctlInit(void) {
     psp_ret(0);   /* the library starts either way, as it would on a PSP */
 }
 
+/* ---- Adhocctl event handlers ------------------------------------------------------------------- */
+
+/* The game's handlers: handler(event, error, arg), called on Adhocctl events. */
+#define MAX_HANDLERS 4
+static struct { uint32_t func, arg; } g_handlers[MAX_HANDLERS];
+
+/* sceNetAdhocctlAddHandler(handler, arg) -> handler id */
+static void hle_AdhocctlAddHandler(void) {
+    const uint32_t fn = psp_arg(0), arg = psp_arg(1);
+    for (int i = 0; i < MAX_HANDLERS; i++) {
+        if (g_handlers[i].func) continue;
+        g_handlers[i].func = fn;
+        g_handlers[i].arg = arg;
+        psp_net_log("mmo: sceNetAdhocctlAddHandler(0x%08X, 0x%08X) -> %d", fn, arg, i);
+        psp_ret((uint32_t)i);
+        return;
+    }
+    psp_net_log("mmo: sceNetAdhocctlAddHandler: no free slot");
+    psp_ret(0x80410B12u);                         /* SCE_NET_ADHOCCTL_ERROR_TOO_MANY_HANDLERS */
+}
+
+/* sceNetAdhocctlDelHandler(id) */
+static void hle_AdhocctlDelHandler(void) {
+    const uint32_t id = psp_arg(0);
+    if (id < MAX_HANDLERS && g_handlers[id].func) { g_handlers[id].func = 0; psp_ret(0); }
+    else psp_ret(0x80410B07u);                    /* SCE_NET_ADHOCCTL_ERROR_INVALID_ARG */
+    psp_net_log("mmo: sceNetAdhocctlDelHandler(%u)", id);
+}
+
+/* ---- Adhocctl state and events --------------------------------------------------------------------- */
+
+enum { ADHOCCTL_STATE_DISCONNECTED = 0, ADHOCCTL_STATE_CONNECTED = 1, ADHOCCTL_STATE_SCANNING = 2, ADHOCCTL_STATE_GAMEMODE = 3 };
+enum { ADHOCCTL_EVENT_ERROR = 0, ADHOCCTL_EVENT_CONNECT = 1, ADHOCCTL_EVENT_DISCONNECT = 2, ADHOCCTL_EVENT_SCAN = 3, ADHOCCTL_EVENT_GAME = 4 };
+static int  g_ctl_state;
+static char g_group[9];
+static struct { int event; uint32_t error; } g_events[16];
+static int g_nevents;
+
+static void queue_event(int ev, uint32_t err) {
+    if (g_nevents < 16) { g_events[g_nevents].event = ev; g_events[g_nevents].error = err; g_nevents++; }
+}
+
+/* The game's handlers run between frames, as the firmware's Adhocctl thread would call them. */
+static void deliver_events(void) {
+    for (int k = 0; k < g_nevents; k++)
+        for (int i = 0; i < MAX_HANDLERS; i++)
+            if (g_handlers[i].func) {
+                psp_net_log("mmo: Adhocctl event %d (error 0x%08X) -> handler 0x%08X", g_events[k].event, g_events[k].error, g_handlers[i].func);
+                psp_call_guest(g_handlers[i].func, (uint32_t)g_events[k].event, g_events[k].error, g_handlers[i].arg);
+            }
+    g_nevents = 0;
+}
+
+/* The network dialog's ad hoc actions: join (or create) the group named in
+ * its ad hoc parameters (pspUtilityNetconfData.adhocparam: group name[8], timeout). */
+static int adhoc_dialog(int action, uint32_t param) {
+    const uint32_t ap = param ? psp_read32(param + 0x34) : 0;
+    memset(g_group, 0, sizeof g_group);
+    if (ap) psp_mem_read_block(g_group, ap, 8);
+    for (int i = 0; i < 8; i++) if (g_group[i] && (g_group[i] < 0x20 || g_group[i] > 0x7E)) g_group[i] = '?';
+    if (!g_joined) {
+        psp_net_log("mmo: network dialog (action %d): not connected to a server -- failed", action);
+        return (int)0x80410B05u;                              /* SCE_NET_ADHOCCTL_ERROR_TIMEOUT: the game shows its network error */
+    }
+    g_ctl_state = ADHOCCTL_STATE_CONNECTED;
+    queue_event(ADHOCCTL_EVENT_CONNECT, 0);
+    psp_net_log("mmo: network dialog (action %d): connected to group '%s'", action, g_group);
+    return 0;
+}
+
+/* sceNetAdhocctlGetState(int *state) */
+static void hle_AdhocctlGetState(void) {
+    if (psp_arg(0)) psp_write32(psp_arg(0), (uint32_t)g_ctl_state);
+    psp_ret(0);
+}
+
 static void on_packet(const psp_net_packet *p, void *user) {
     (void)user;
     if (p->port != PSP_MMO_CTRL_PORT) return;   /* game traffic: later tasks */
@@ -95,6 +174,7 @@ static void on_packet(const psp_net_packet *p, void *user) {
 }
 
 void psp_net_mmo_pump(void) {
+    if (g_nevents) deliver_events();
     if (!g_joined) return;
     const psp_net_transport *t = psp_net_get_transport();
     t->poll_packets(t->ctx, on_packet, NULL);
@@ -107,4 +187,8 @@ void psp_net_mmo_register(void) {
         psp_hle_register(nid, lib, name, hle_traced);
     }
     psp_hle_register(0xE26F226E, "sceNetAdhocctl", "sceNetAdhocctlInit", hle_AdhocctlInit);
+    psp_hle_register(0x20B317A0, "sceNetAdhocctl", "sceNetAdhocctlAddHandler", hle_AdhocctlAddHandler);
+    psp_hle_register(0x6402490B, "sceNetAdhocctl", "sceNetAdhocctlDelHandler", hle_AdhocctlDelHandler);
+    psp_hle_register(0x75ECD386, "sceNetAdhocctl", "sceNetAdhocctlGetState", hle_AdhocctlGetState);
+    psp_net_set_adhoc_dialog(adhoc_dialog);
 }
