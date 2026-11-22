@@ -360,13 +360,43 @@ static uint32_t pad_state(uint8_t *ax, uint8_t *ay, uint8_t *rx, uint8_t *ry) {
     return bits;
 }
 
+/* Reverse-engineering aid, off unless PSP2I_RAMDUMP is set: F7 (or SIGUSR1) writes the
+ * game's memory (0x08800000-0x0A000000) to logs/ramdump_<n>.bin, for
+ * port/re/ramdiff.py (which arrays change when players join or leave). */
+static void ram_dump(void) {
+    static int n;
+    static int on = -1;
+    if (on < 0) on = getenv("PSP2I_RAMDUMP") != NULL;
+    if (!on) return;
+    const uint32_t lo = 0x08800000u, len = 0x0A000000u - 0x08800000u;
+    uint8_t *buf = malloc(len);
+    if (!buf) return;
+    char path[1200];
+    snprintf(path, sizeof path, "%s/logs/ramdump_%d.bin", g_base, n++);
+    FILE *f = psp_mem_read_block(buf, lo, len) == 0 ? fopen(path, "wb") : NULL;
+    if (f) { fwrite(buf, 1, len, f); fclose(f); fprintf(stderr, "ramdump: %s\n", path); }
+    free(buf);
+}
+
+#ifndef _WIN32
+#include <signal.h>
+static volatile sig_atomic_t g_dump_req;
+static void on_usr1(int s) { (void)s; g_dump_req = 1; }
+#endif
+
 static void pump_events(void) {
     SDL_Event e;
+#ifndef _WIN32
+    static int armed;
+    if (!armed) { armed = 1; if (getenv("PSP2I_RAMDUMP")) signal(SIGUSR1, on_usr1); }
+    if (g_dump_req) { g_dump_req = 0; ram_dump(); }
+#endif
     while (SDL_PollEvent(&e)) {
         switch (e.type) {
         case SDL_EVENT_QUIT: psp_request_exit(); break;
         case SDL_EVENT_KEY_DOWN:                         /* Android's Back, or F1: the settings menu */
             if (!e.key.repeat && (e.key.key == SDLK_AC_BACK || e.key.key == SDLK_F1)) g_menu_latched |= MI_TOGGLE;
+            if (!e.key.repeat && e.key.key == SDLK_F7) ram_dump();
             break;
         case SDL_EVENT_FINGER_DOWN:   touch_event(&e.tfinger, 1, 0); break;
         case SDL_EVENT_FINGER_MOTION: touch_event(&e.tfinger, 0, 0); break;
