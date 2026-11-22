@@ -123,12 +123,25 @@ function pointers that the host installs with `psp_net_set_transport()`.
 
 | Roadmap method | C member |
 |---|---|
-| Initialize | `int initialize(const uint8_t self_mac[6])` |
-| HostSession | `int host_session(const char *group, int max_players)` |
-| JoinSession | `int join_session(const char *address, const char *group)` |
-| SendPacket | `int send_packet(const psp_net_peer *to, int channel, uint16_t port, const void *data, uint32_t len)` |
-| PollPackets | `int poll_packets(psp_net_packet_fn fn, void *user)` |
-| Shutdown | `void shutdown(void)` |
+| Initialize | `int initialize(void *ctx, const uint8_t self_mac[6])` |
+| HostSession | `int host_session(void *ctx, const char *group, int max_players)` |
+| JoinSession | `int join_session(void *ctx, const char *address, const char *group)` |
+| SendPacket | `int send_packet(void *ctx, const psp_net_peer *to, int channel, uint16_t port, const void *data, uint32_t len)` |
+| PollPackets | `int poll_packets(void *ctx, psp_net_packet_fn fn, void *user)` |
+| Shutdown | `void shutdown(void *ctx)` |
+
+Each function takes the transport's `ctx` (the instance), so several transports
+can live in one process (a LAN host that also plays, and the tests).
+
+### ENet implementation (Task 1.2): `include/psprecomp/net_enet.h`
+
+`psp_net_enet_create(cfg)` returns an instance; `psp_net_enet_transport(e)` is its
+`psp_net_transport`. The topology is a star: the host assigns ids (host = 1,
+clients 2, 3, ...) after a HELLO/WELCOME exchange and relays client-to-client
+packets. The host stamps every relayed packet's source from the connection, so
+a client cannot impersonate another MAC or id. Channel 0 is ENet reliable
+sequenced; channel 1 is ENet unreliable sequenced. ENet v1.3.18 is fetched by
+CMake FetchContent and linked statically. Test: `psprecomp/tests/test_enet_transport.c`.
 
 `psp_net_peer` = `{ uint8_t mac[6]; uint64_t id; }`, which maps the game's MAC to a
 server-assigned id. Channel 0 is reliable and channel 1 is unreliable (sequenced).
