@@ -47,6 +47,26 @@ HD textures use PPSSPP's pack format and hashing, so PPSSPP packs work as they a
 
 PPSSPP and PSP saves load and save encrypted, so they work in both directions. In-game, Cross confirms.
 
+### Controls
+
+The keyboard uses PPSSPP's default layout. Click the game window first. A gamepad works as soon as it's connected, including the Steam Deck's controls.
+
+| PSP | Keyboard | Gamepad |
+| --- | --- | --- |
+| D-pad | Arrow keys | D-pad |
+| Analog stick | I / J / K / L (up / left / down / right) | Left stick |
+| Camera | — | Right stick |
+| Circle (confirm) | X | B / Circle (east) |
+| Cross (cancel) | Z | A / Cross (south) |
+| Square | A | X / Square (west) |
+| Triangle | S | Y / Triangle (north) |
+| L / R | Q / W | Shoulders or triggers |
+| Start | Space | Start / Menu |
+| Select | V (or Enter) | Back / View |
+| Settings menu | F1 | R3 or Guide |
+
+This is the Japanese release, so Circle confirms and Cross cancels. On Windows the keys can be rebound in the settings menu (CONTROLS > KEYBOARD/MOUSE).
+
 ### MMO client and dedicated server
 
 ```sh

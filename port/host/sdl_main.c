@@ -328,13 +328,15 @@ static uint32_t pad_state(uint8_t *ax, uint8_t *ay, uint8_t *rx, uint8_t *ry) {
 #ifndef SDL_PLATFORM_ANDROID
     const bool *keys = SDL_GetKeyboardState(NULL);
     if (SDL_GetKeyboardFocus() == g_win) {
+        /* PPSSPP's default keyboard layout (Core/KeyMapDefaults.cpp), so its players feel at home */
         static const struct { SDL_Scancode key; uint32_t bit; } keyboard[] = {
             {SDL_SCANCODE_UP, P_UP}, {SDL_SCANCODE_DOWN, P_DOWN},
             {SDL_SCANCODE_LEFT, P_LEFT}, {SDL_SCANCODE_RIGHT, P_RIGHT},
-            {SDL_SCANCODE_X, P_CIRCLE}, {SDL_SCANCODE_Z, P_CROSS},     /* as the Windows build */
+            {SDL_SCANCODE_X, P_CIRCLE}, {SDL_SCANCODE_Z, P_CROSS},
             {SDL_SCANCODE_A, P_SQUARE}, {SDL_SCANCODE_S, P_TRIANGLE},
-            {SDL_SCANCODE_Q, P_L}, {SDL_SCANCODE_E, P_R},
-            {SDL_SCANCODE_RETURN, P_START}, {SDL_SCANCODE_RSHIFT, P_SELECT}
+            {SDL_SCANCODE_Q, P_L}, {SDL_SCANCODE_W, P_R},
+            {SDL_SCANCODE_SPACE, P_START},
+            {SDL_SCANCODE_V, P_SELECT}, {SDL_SCANCODE_RETURN, P_SELECT}   /* V on Windows, Enter elsewhere, in PPSSPP */
         };
         for (size_t k = 0; k < sizeof keyboard / sizeof keyboard[0]; ++k)
             if (keys[keyboard[k].key]) bits |= keyboard[k].bit;

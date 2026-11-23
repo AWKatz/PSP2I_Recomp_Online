@@ -29,16 +29,16 @@ Place your PSP fonts or compatible replacement fonts in GameData/flash/font.
 Saves go under
 GameData/ms; the runtime log is psp2i_log.txt in the repository root.
 
-Keyboard controls (click the game window first):
+Keyboard controls (click the game window first): PPSSPP's default layout, listed in the main README under "Controls".
 
 | Keys | PSP control |
 | --- | --- |
 | Arrow keys | D-pad |
 | I / J / K / L | Analog up / left / down / right |
-| X / Z | Cross / Circle |
+| X / Z | Circle (confirm) / Cross (cancel) |
 | A / S | Square / Triangle |
-| Q / E | L / R |
-| Return / Right Shift | Start / Select |
+| Q / W | L / R |
+| Space / V (or Enter) | Start / Select |
 
 SDL-compatible controllers are also supported, including right-stick camera.
 Close the game window to quit.

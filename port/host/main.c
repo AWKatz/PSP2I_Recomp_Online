@@ -458,15 +458,15 @@ static void draw_dist_apply(void) {
 /* The keys and mouse buttons bound to the PSP's controls (menu CONTROLS > KEYBOARD/MOUSE, key_*= in
  * psp2i_display.ini), KB_* order; 0 = none. Each key is bound to one control.
  * Defaults: arrows the D-pad, S/X/Z/A Triangle/Circle/Cross/Square, Q/W L/R,
- * Enter Start, Space Select, and the left stick on I/K/J/L (as the SDL host). */
+ * Space Start, V Select, and the left stick on I/K/J/L: PPSSPP's default keyboard layout (as the SDL host). */
 static const WPARAM KEY_DEFAULTS[KB_N] = { VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, 'S', 'X', 'Z', 'A', 'Q', 'W',
-                                           VK_RETURN, VK_SPACE, 'I', 'K', 'J', 'L' };
+                                           VK_SPACE, 'V', 'I', 'K', 'J', 'L' };
 static const char *const KEY_INI[KB_N] = { "up", "down", "left", "right", "triangle", "circle", "cross", "square",
                                            "l", "r", "start", "select", "stick_up", "stick_down", "stick_left", "stick_right" };
 static const uint32_t KEY_PSP[KB_STICK_UP] = { 0x0010, 0x0040, 0x0080, 0x0020, 0x1000, 0x2000, 0x4000, 0x8000,
                                                 0x0100, 0x0200, 0x0008, 0x0001 };
 static WPARAM g_bind[KB_N] = { VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, 'S', 'X', 'Z', 'A', 'Q', 'W',
-                               VK_RETURN, VK_SPACE, 'I', 'K', 'J', 'L' };
+                               VK_SPACE, 'V', 'I', 'K', 'J', 'L' };
 
 /* A key's name, as the menu and the ini show it (the menu font's characters). */
 static const struct { WPARAM vk; const char *name; } KEY_NAMES[] = {
