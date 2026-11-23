@@ -14,6 +14,13 @@ A fork of the recompilation project for **Phantasy Star Portable 2 Infinity (PSP
 
 **This fork (PSP2I_Recomp_Online)** adds online play: an MMO-capable client build with the ability to warp to other lobby zones similar to PSO/PSU, lets you show off your characters weapons and gear in the lobby and supports dedicated 32 players per server with an easy to use web admin panel. The single-player build is unchanged unless you build with `-DENABLE_MMO_NET=ON` (client) or `-DBUILD_DEDICATED_SERVER=ON` (server).
 
+Online features at a glance (MMO builds):
+
+- **Party finder**: pick a party being hosted on the server, or start your own, from the Matching Counter.
+- **Lobby warps**: the party leader takes the whole party to any of ten rooms of the Multi Mode lobby (Bridge, Cafe, Battle Shop, Style Shop, Little Wing and more).
+- **Weapons in the lobby**: the party leader can let everyone draw their weapons in the lobby to show off their gear, or keep the original game's look.
+- **Dedicated server**: up to 32 players, server-side loot, SQLite persistence and a web admin panel.
+
 ## Quick Start
 
 You need your own copy of the game: a decrypted `EBOOT.BIN` (needed to build) and the disc image (`.iso`). Everything that gets built or generated goes into `build/`.
@@ -184,7 +191,21 @@ If a step doesn't happen in time, the finder hands control back with a notice.
 
 **Lobby menu (MMO builds).** In the Multi Mode lobby, F2 / L3 opens the lobby menu instead (same keys as the party finder):
 
-- **Warp the party to**: Central Plaza, Shop Plaza, Bridge (mission terminal), Counter Room, Cafe, Observation Deck, Battle Shop, Style Shop, the Style Shop's Salon or Little Wing. Only the party leader can choose; the server passes the choice to every member and the whole party moves together.
+- **Warp the party to** one of the lobby's rooms. Only the party leader can choose; the server passes the choice to every member and the whole party moves together.
+
+  | Room | What's there |
+  | --- | --- |
+  | Central Plaza | where Multi Mode starts |
+  | Shop Plaza | the shop doors |
+  | Bridge | the mission terminal |
+  | Counter Room | the counters |
+  | Cafe | the cafe |
+  | Observation Deck | the open deck under the stars |
+  | Battle Shop | weapons and armour |
+  | Style Shop | clothes and parts |
+  | Style Shop: Salon | the Style Shop's salon |
+  | Little Wing | the Little Wing office |
+
 - **Weapons in the lobby** (off by default; the party leader's choice for the whole party): show off your gear. With it on, the lobby gets the weapon palette (hold Cross / Z and pick a weapon set as in a mission), and everyone in the party sees the weapons you draw. Switching it re-enters the room you are in, so it applies at once; off puts every weapon away and hides the palette, as in the original game. Attacks do nothing there: the lobby has no enemies.
 
 **Test switches (any SDL build).** `PSP2I_TEST_INPUT=1` makes the client read button presses from `<data>/logs/input.cmd` (`start`, `circle`, `cross`, `up`, `down`, …, `wait500`, `f2`, `shot`, which saves the window's picture to `logs/shot_<n>.png`, `stick<u|d|l|r><ms>`, `hold<button>` / `release`, `watch<hex address>`, `dump`, `warp<dest>,<area index>,<zone>,<entry>` and `lobbyweapons<0|1>`), so test scripts can drive several clients at once without window focus. `PSP2I_NETTRACE=1` logs every ad hoc socket call; `PSP2I_RAMDUMP=1` makes F7 save the game's memory to `logs/`.
@@ -197,8 +218,8 @@ More detail: [server/README.md](server/README.md), [port/linux/README.md](port/l
 | --- | --- |
 | 1. Client networking: isolated network layer, ENet transport, MMO client entry | done |
 | 2. Dedicated server: headless server, SQLite persistence, server-side loot, web admin | done |
-| 3. Break the 4-player limits | in progress: limits mapped and checked in a live party ([docs/player_limit_offsets.md](docs/player_limit_offsets.md)); party finder |
-| 4. Mixed frame rates and the lobby | in progress: 30 / 60 fps players play together ([docs/mixed_framerate_results.md](docs/mixed_framerate_results.md)); lobby warps and weapons in the lobby ([docs/area_research.md](docs/area_research.md)) |
+| 3. Break the 4-player limits | in progress: limits mapped and checked in a live party ([docs/player_limit_offsets.md](docs/player_limit_offsets.md)); party finder. Next: lobbies for up to 32 players with parties still capped at 4, and streaming nearby players' characters |
+| 4. Mixed frame rates and the lobby | done: 30 / 60 fps players play together ([docs/mixed_framerate_results.md](docs/mixed_framerate_results.md)); lobby warps and weapons in the lobby ([docs/area_research.md](docs/area_research.md)). Still open: smoothing other players' movement. Saves stay on the player's side (no server-side saves) |
 
 Details are in [docs/net_hle_audit.md](docs/net_hle_audit.md) and [server/README.md](server/README.md). Saved for later: [Internet Multi Mode](docs/future_internet_multi_mode.md).
 
