@@ -194,7 +194,7 @@ More detail: [server/README.md](server/README.md), [port/linux/README.md](port/l
 | 2. Dedicated server: headless server, SQLite persistence, server-side loot, web admin | done |
 | 3. Break the 4-player limits | in progress: limits mapped and checked in a live party ([docs/player_limit_offsets.md](docs/player_limit_offsets.md)); party finder |
 
-Details are in [docs/net_hle_audit.md](docs/net_hle_audit.md) and [server/README.md](server/README.md).
+Details are in [docs/net_hle_audit.md](docs/net_hle_audit.md) and [server/README.md](server/README.md). Saved for later: [Internet Multi Mode](docs/future_internet_multi_mode.md).
 
 ## AI Disclosure
 
