@@ -1,0 +1,3 @@
+# PSP2i MMO client: find the server on the LAN
+lan_discovery = true
+player_name   = "Goth Baddie"
