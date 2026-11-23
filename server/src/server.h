@@ -2,7 +2,7 @@
  * control protocol (net_proto.h), handshake checks, rate limiting and LAN
  * discovery. No rendering, audio, windowing or game runtime.
  *
- * Driven by srv_tick() at a fixed rate (main.c: 30 Hz). Single-threaded. */
+ * Driven by srv_tick() at a fixed rate (main.c: 60 Hz by default, --tick-rate). Single-threaded. */
 #ifndef PSP2I_SERVER_H
 #define PSP2I_SERVER_H
 

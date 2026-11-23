@@ -38,7 +38,7 @@ Rules that apply in both modes:
 - **Rate-limit kicks** (online mode). A player who sends over the limit for 3 seconds in a row is disconnected.
 - **Disconnect reasons.** Whenever the server disconnects a client, it sends a reason code (`PSP_MMO_DISC_*` in `net_proto.h`).
 
-The tick runs at a fixed 30 Hz (33.33 ms): read the network, run session upkeep, answer LAN probes, then sleep to the next deadline.
+The tick runs at a fixed 60 Hz by default (16.67 ms), matching the clients' 60 fps; `--tick-rate N` sets 10–120. Each tick reads the network, runs session upkeep and answers LAN probes, then waits on the network until the next deadline, so game traffic between players is relayed as soon as it arrives rather than once per tick.
 
 Every `--stats` seconds the server logs a status line: tick rate, tick work time, CPU, RSS and packet counts. It logs a summary on exit as well. Ctrl-C or SIGTERM shuts the server down and tells every client (`DISC_SHUTDOWN`).
 
@@ -81,7 +81,7 @@ With `lan_discovery = true` and no `server_ip` in `client_config.toml`, an MMO-b
 
 ## Tests
 
-- `cmake --build server/build --target test_server && server/build/test_server` runs the server on its own thread at 30 Hz against real ENet clients. It covers the handshake checks, LAN discovery, relay gating, and the timeout, protocol, rate-limit and shutdown disconnects.
+- `cmake --build server/build --target test_server && server/build/test_server` runs the server on its own thread against real ENet clients. It covers the handshake checks, LAN discovery, relay gating, the party directory, and the timeout, protocol, rate-limit and shutdown disconnects.
 - `test_db` (POSIX only) checks the crypto and the database. A child process runs a trade or a claim and is SIGKILLed partway through, at every crash point and in 300 random rounds. The test then reopens the database and checks that every item exists exactly once, total Meseta is unchanged, and `integrity_check` passes.
 - `test_admin` covers the panel and its API end to end: the page, logins and throttling, rates set through the API changing a real client's drops, a ban disconnecting a client within 1 s and refusing it on reconnect, announcements, events, the drop-table editor, the audit log, RCON, the event stream and the console.
 - `python3 server/tools/lan_probe.py [--expect-name NAME] [--expect-players N]` broadcasts a probe and checks the replies against a running server.
@@ -92,6 +92,6 @@ With `lan_discovery = true` and no `server_ip` in `client_config.toml`, an MMO-b
 | --- | --- | --- |
 | Memory (RSS) | < 50 MB | 1.8 MB (3.2 MB with the database open) |
 | CPU (one core) | < 2% | 0.13% (0.0–0.1% in `ps`) |
-| Tick rate | 30 Hz | 30.01 Hz, 0 late ticks; each tick's work averages 0.026 ms, max 0.111 ms |
+| Tick rate | 60 Hz | 59.9–60.5 Hz, 0 late ticks; each tick's work averages 0.017–0.019 ms, max 0.074 ms; CPU 0.2% (Apple M4, idle server) |
 
 The Linux and Windows builds have not been measured yet.

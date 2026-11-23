@@ -3,8 +3,9 @@
  *   psp2i_server --lan    [--port 29001] [--lan-port 29000] [--name "..."]
  *   psp2i_server --online [--port 29001] [--bind ADDR] [--rate-limit 120]
  *
- * A fixed 30 Hz tick (33.33 ms): each tick reads the network, runs session
- * upkeep and answers LAN probes, then sleeps to the next deadline. Ctrl-C or
+ * A fixed tick, 60 Hz by default (16.67 ms; --tick-rate): each tick reads the
+ * network, runs session upkeep and answers LAN probes, then waits on the
+ * network until the next deadline (game traffic is relayed as it arrives). Ctrl-C or
  * SIGTERM shuts down cleanly. See --help. */
 #include "admin.h"
 #include "clock.h"
@@ -21,8 +22,9 @@
 #include <string.h>
 #include <time.h>
 
-#define TICK_HZ 30
-#define TICK_NS (1000000000ull / TICK_HZ)
+#define TICK_HZ_DEFAULT 60                /* the clients run at 60 fps */
+static unsigned g_tick_hz = TICK_HZ_DEFAULT;
+#define TICK_NS (1000000000ull / g_tick_hz)
 
 static volatile int g_quit;
 static volatile sig_atomic_t g_reload;
@@ -66,6 +68,7 @@ static void usage(void) {
          "  --max-players N        1..32 (default 32: the hub cap)\n"
          "  --rate-limit N         online: packets per second per player (default 120, burst 2x)\n"
          "  --handshake-timeout S  seconds a new connection has to send its handshake (default 5)\n"
+         "  --tick-rate N          server ticks per second, 10..120 (default 60)\n"
          "  --stats S              print a status line every S seconds (default 60, 0 = off)\n"
          "  --run-seconds S        exit after S seconds (tests, measurements)\n"
          "  --db PATH              the database (default psp2i_server.db; SQLite, WAL)\n"
@@ -121,6 +124,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--max-players")) { i = need(i, argc, a); cfg.max_players = (int)num(argv[i], a, 1, SRV_MAX_PLAYERS); }
         else if (!strcmp(a, "--rate-limit")) { i = need(i, argc, a); cfg.rate_pps = (uint32_t)num(argv[i], a, 1, 100000); }
         else if (!strcmp(a, "--handshake-timeout")) { i = need(i, argc, a); cfg.handshake_timeout_ms = (uint32_t)num(argv[i], a, 1, 3600) * 1000u; }
+        else if (!strcmp(a, "--tick-rate")) { i = need(i, argc, a); g_tick_hz = (unsigned)num(argv[i], a, 10, 120); }
         else if (!strcmp(a, "--stats")) { i = need(i, argc, a); stats_s = num(argv[i], a, 0, 86400); }
         else if (!strcmp(a, "--run-seconds")) { i = need(i, argc, a); run_s = num(argv[i], a, 1, 31536000); }
         else if (!strcmp(a, "--db")) { i = need(i, argc, a); db_path = argv[i]; }

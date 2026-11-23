@@ -109,6 +109,7 @@ cd server && ../build/server/psp2i_server --lan    # run it where config/ is, or
 | `--db PATH` | psp2i_server.db | the SQLite database (accounts, characters, drops, audit log) |
 | `--drop-tables PATH` | config/drop_tables.json | loot tables |
 | `--rates PATH` | config/rates.toml | rate multipliers |
+| `--tick-rate N` | 60 | server ticks per second (10–120); 60 matches the clients' 60 fps. Game traffic is relayed as it arrives, between ticks too |
 | `--stats S` | 60 | print a status line every S seconds (0 = off) |
 | `--run-seconds S` | off | exit after S seconds |
 | `--web-port N` | off | serve the web admin panel on this TCP port |
@@ -214,7 +215,7 @@ Current capabilities include:
 * PPSSPP and PSP saves load and save, encrypted as on hardware
 * **Online (this fork):**
   * MMO client build: the game's ad hoc Multi Mode joins a server over ENet. The server is set in `client_config.toml` or found on the LAN automatically.
-  * Dedicated server `psp2i_server`: headless, 30 Hz, no runtime dependencies, about 2–4 MB of RAM.
+  * Dedicated server `psp2i_server`: headless, 60 Hz tick (`--tick-rate`), no runtime dependencies, about 2–4 MB of RAM.
   * LAN and online modes, handshake checks, rate limiting, and bans by IP or account.
   * Embedded SQLite database for accounts, characters and JSON inventories. Trades are crash-safe, so items can't be duplicated.
   * Loot rolled by the server, with live rate multipliers and drop tables that reload while it runs.
