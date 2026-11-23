@@ -32,6 +32,7 @@ void psp_net_mmo_configure(const psp_net_mmo_config *cfg) {
     if (!cfg) return;
     if (cfg->server)      snprintf(g_server, sizeof g_server, "%s", cfg->server);
     if (cfg->player_name) snprintf(g_name, sizeof g_name, "%s", cfg->player_name);
+    mmo_np_set_name(g_name);
     if (cfg->version)     snprintf(g_version, sizeof g_version, "%s", cfg->version);
 }
 
@@ -379,7 +380,35 @@ void psp_net_mmo_pump(void) {
         t->poll_packets(t->ctx, on_packet, NULL);
     }
     mmo_matching_pump();
+    mmo_np_pump();
 }
+
+/* ---- the PSN sign-in dialog (Internet Multi Mode) ------------------------------------------ */
+/* No PSN: the dialog "runs" for a few frames and finishes signed in (result 0),
+ * the way the network dialog does in net.c. 0 none, 1 init, 2 running, 3 finished, 4 shutdown. */
+static int g_psn_status, g_psn_polls;
+static uint32_t g_psn_param;
+
+static void hle_PsnInitStart(void) {
+    g_psn_param = psp_arg(0); g_psn_status = 1; g_psn_polls = 0;
+    psp_net_log("mmo: PSN sign-in dialog started (param 0x%08X): signing in offline", g_psn_param);
+    psp_ret(0);
+}
+static void hle_PsnUpdate(void) {
+    if (g_psn_status == 2 && ++g_psn_polls >= 3) {
+        if (g_psn_param) psp_write32(g_psn_param + 0x1C, 0);   /* common.result */
+        g_psn_status = 3;
+        psp_net_log("mmo: PSN sign-in dialog finished: signed in");
+    }
+    psp_ret(0);
+}
+static void hle_PsnGetStatus(void) {
+    const int s = g_psn_status;
+    if (s == 1) g_psn_status = 2;
+    else if (s == 4) g_psn_status = 0;
+    psp_ret((uint32_t)s);
+}
+static void hle_PsnShutdownStart(void) { g_psn_status = 4; psp_ret(0); }
 
 void psp_net_mmo_register(void) {
     uint32_t nid; const char *lib, *name; int ok;
@@ -387,6 +416,12 @@ void psp_net_mmo_register(void) {
         g_traced[g_ntraced].nid = nid; g_traced[g_ntraced].succeeds = ok; g_ntraced++;
         psp_hle_register(nid, lib, name, hle_traced);
     }
+    mmo_np_register();
+    mmo_np_set_name(g_name);
+    psp_hle_register(0xA7BB7C67, "sceUtility", "sceUtilityPsnInitStart", hle_PsnInitStart);
+    psp_hle_register(0x0940A1B9, "sceUtility", "sceUtilityPsnUpdate", hle_PsnUpdate);
+    psp_hle_register(0x094198B8, "sceUtility", "sceUtilityPsnGetStatus", hle_PsnGetStatus);
+    psp_hle_register(0xC130D441, "sceUtility", "sceUtilityPsnShutdownStart", hle_PsnShutdownStart);
     psp_hle_register(0xE26F226E, "sceNetAdhocctl", "sceNetAdhocctlInit", hle_AdhocctlInit);
     psp_hle_register(0x9D689E13, "sceNetAdhocctl", "sceNetAdhocctlTerm", hle_AdhocctlTerm);
     psp_hle_register(0x20B317A0, "sceNetAdhocctl", "sceNetAdhocctlAddHandler", hle_AdhocctlAddHandler);

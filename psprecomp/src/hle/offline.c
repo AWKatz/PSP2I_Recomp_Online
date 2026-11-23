@@ -16,8 +16,20 @@
 
 #define SCE_KERNEL_ERROR_ERROR 0x80020001u
 
-static void ok(void)   { psp_ret(0); }
-static void fail(void) { psp_ret(SCE_KERNEL_ERROR_ERROR); }
+#include <stdlib.h>
+
+/* PSP2I_NETTRACE=1: every stubbed call logged (library, NID, first arguments). */
+static void trace_stub(const char *what) {
+    static int on = -1;
+    if (on < 0) on = getenv("PSP2I_NETTRACE") != NULL;
+    if (!on) return;
+    const uint32_t nid = psp_hle_current_nid();
+    const char *name = psp_hle_name_of(nid);
+    psp_net_log("stub: %s 0x%08X %s(0x%X, 0x%X, 0x%X, 0x%X) -> %s", name ? name : "?", nid, "", psp_arg(0), psp_arg(1),
+                psp_arg(2), psp_arg(3), what);
+}
+static void ok(void)   { trace_stub("0"); psp_ret(0); }
+static void fail(void) { trace_stub("fail"); psp_ret(SCE_KERNEL_ERROR_ERROR); }
 
 /* name: the firmware name where it is known, else NULL. */
 static const struct { uint32_t nid; const char *lib, *name; int succeeds; } STUBS[] = {

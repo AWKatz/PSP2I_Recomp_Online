@@ -273,6 +273,11 @@ static void hle_SendRequest(void) {
     q.body = body;
     const uint32_t id = psp_arg(0);
     hlog("request %d: game sends %u bytes from 0x%08X", (int)id, q.body_len, psp_arg(1));
+    if (body && getenv("PSP2I_NETTRACE")) {                 /* the body, in hex (first 256 bytes) */
+        char hex[3 * 256 + 1]; size_t n = q.body_len < 256 ? q.body_len : 256, o = 0;
+        for (size_t i = 0; i < n; i++) o += (size_t)snprintf(hex + o, sizeof hex - o, "%02X ", body[i]);
+        hlog("request %d body: %s", (int)id, hex);
+    }
     free(r->resp.body);
     memset(&r->resp, 0, sizeof r->resp);
     r->q = q;                                           /* strings point into r, c, t: alive until joined */

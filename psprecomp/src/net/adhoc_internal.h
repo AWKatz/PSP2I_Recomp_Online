@@ -25,4 +25,9 @@ void mmo_sockets_register(void);
 void mmo_sockets_on_packet(const psp_net_packet *p);
 void mmo_net_poll(void);                          /* read the network now (blocking calls wait with it) */
 
+/* PSN sign-in without PSN (np_mmo.c) */
+void mmo_np_register(void);
+void mmo_np_set_name(const char *name);
+void mmo_np_pump(void);                           /* once a frame: ticket callbacks */
+
 #endif

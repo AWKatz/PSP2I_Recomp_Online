@@ -12,14 +12,15 @@
 
 A fork of the recompilation project for **Phantasy Star Portable 2 Infinity (PSP2i)**, bringing the game PC/macOS/Linux environments while preserving the original game's functionality and feel.
 
-**This fork (PSP2I_Recomp_Online)** adds online play: an MMO-capable client build with the ability to warp to other lobby zones similar to PSO/PSU, lets you show off your characters weapons and gear in the lobby and supports dedicated 32 players per server with an easy to use web admin panel. The single-player build is unchanged unless you build with `-DENABLE_MMO_NET=ON` (client) or `-DBUILD_DEDICATED_SERVER=ON` (server).
+**This fork (PSP2I_Recomp_Online)** adds online play: an MMO-capable client build with the ability to warp to other lobby zones similar to PSO/PSU, lets you show off your characters weapons and gear in the lobby and supports up to 32 players per dedicated server, with an easy to use web admin panel. Player limits match the original game servers: 12 players per Internet Multi Mode lobby room and 4 players per Multi Mode party. The single-player build is unchanged unless you build with `-DENABLE_MMO_NET=ON` (client) or `-DBUILD_DEDICATED_SERVER=ON` (server).
 
 Online features at a glance (MMO builds):
 
 - **Party finder**: pick a party being hosted on the server, or start your own, from the Matching Counter.
 - **Lobby warps**: the party leader takes the whole party to any of ten rooms of the Multi Mode lobby (Bridge, Cafe, Battle Shop, Style Shop, Little Wing and more).
 - **Weapons in the lobby**: the party leader can let everyone draw their weapons in the lobby to show off their gear, or keep the original game's look.
-- **Dedicated server**: up to 32 players, server-side loot, SQLite persistence and a web admin panel.
+- **Player limits as on the original servers**: Internet Multi Mode lobby rooms hold 12 players and Multi Mode parties hold 4, 1:1 with the original game servers. The server runs several lobby rooms side by side to reach its total.
+- **Dedicated server**: up to 32 players in total, server-side loot, SQLite persistence and a web admin panel.
 
 ## Quick Start
 
@@ -110,7 +111,7 @@ cd server && ../build/server/psp2i_server --lan    # run it where config/ is, or
 | `--bind ADDR` | all interfaces | address to listen on |
 | `--lan-port N` | 29000 | LAN discovery port (UDP) |
 | `--name NAME` | PSP2i Server | name shown to LAN clients |
-| `--max-players N` | 32 | 1–32: one lobby/hub holds at most 32 players |
+| `--max-players N` | 32 | 1–32: players on the server in total (each Internet Multi Mode lobby room still holds 12, each Multi Mode party 4) |
 | `--rate-limit N` | 120 | online: packets per second per player (bursts up to 2x; kicked after 3 s over) |
 | `--handshake-timeout S` | 5 | seconds a new connection has to send its handshake |
 | `--kill-limit N` | 10 | enemy-kill reports per second per player |
@@ -218,10 +219,10 @@ More detail: [server/README.md](server/README.md), [port/linux/README.md](port/l
 | --- | --- |
 | 1. Client networking: isolated network layer, ENet transport, MMO client entry | done |
 | 2. Dedicated server: headless server, SQLite persistence, server-side loot, web admin | done |
-| 3. Break the 4-player limits | in progress: limits mapped and checked in a live party ([docs/player_limit_offsets.md](docs/player_limit_offsets.md)); party finder. Next: lobbies for up to 32 players with parties still capped at 4, and streaming nearby players' characters |
+| 3. Break the 4-player limits | in progress: limits mapped and checked in a live party ([docs/player_limit_offsets.md](docs/player_limit_offsets.md)); party finder. Limits stay 1:1 with the original game servers: 12 players per Internet Multi Mode lobby room, 4 per Multi Mode party. Next: Internet Multi Mode through our server, with several 12-player lobby rooms for up to 32 players ([docs/psn_lobby_plan.md](docs/psn_lobby_plan.md)) |
 | 4. Mixed frame rates and the lobby | done: 30 / 60 fps players play together ([docs/mixed_framerate_results.md](docs/mixed_framerate_results.md)); lobby warps and weapons in the lobby ([docs/area_research.md](docs/area_research.md)). Still open: smoothing other players' movement. Saves stay on the player's side (no server-side saves) |
 
-Details are in [docs/net_hle_audit.md](docs/net_hle_audit.md) and [server/README.md](server/README.md). Saved for later: [Internet Multi Mode](docs/future_internet_multi_mode.md).
+Details are in [docs/net_hle_audit.md](docs/net_hle_audit.md) and [server/README.md](server/README.md). Internet Multi Mode (12-player lobby rooms) is in progress: [docs/psn_lobby_plan.md](docs/psn_lobby_plan.md).
 
 ## AI Disclosure
 
