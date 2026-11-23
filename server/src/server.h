@@ -55,6 +55,8 @@ int  srv_start(srv *s);
 void srv_tick(srv *s, uint64_t now_ms);
 /* Disconnect everyone (reason SHUTDOWN) and close the sockets. */
 void srv_stop(srv *s);
+/* Between ticks: wait up to timeout_ms for traffic and handle it (relay at once). */
+void srv_wait(srv *s, uint32_t timeout_ms);
 void srv_destroy(srv *s);
 
 void     srv_get_stats(const srv *s, srv_stats *out);

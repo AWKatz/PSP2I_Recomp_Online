@@ -207,7 +207,8 @@ static void on_packet(const psp_net_packet *p, void *user) {
     (void)user;
     if (p->port != PSP_MMO_CTRL_PORT) {
         if ((int)p->port == mmo_matching_port()) mmo_matching_on_packet(p);
-        return;                                   /* other game traffic (PDP/PTP): later */
+        else mmo_sockets_on_packet(p);            /* PDP / PTP */
+        return;
     }
     const uint16_t type = psp_mmo_type(p->data, p->len);
     if (type == MSG_S2C_HANDSHAKE_ACK && p->len >= PSP_MMO_HANDSHAKE_ACK_LEN) {
@@ -219,6 +220,12 @@ static void on_packet(const psp_net_packet *p, void *user) {
     } else {
         psp_net_log("mmo: control message 0x%04X (%u bytes) ignored", type, p->len);
     }
+}
+
+void mmo_net_poll(void) {
+    if (!g_joined) return;
+    const psp_net_transport *t = psp_net_get_transport();
+    t->poll_packets(t->ctx, on_packet, NULL);
 }
 
 void psp_net_mmo_pump(void) {
@@ -247,4 +254,5 @@ void psp_net_mmo_register(void) {
     psp_hle_register(0xDED9D28E, "sceNetAdhocctl", "sceNetAdhocctlGetParameter", hle_AdhocctlGetParameter);
     psp_net_set_adhoc_dialog(adhoc_dialog);
     mmo_matching_register();
+    mmo_sockets_register();
 }

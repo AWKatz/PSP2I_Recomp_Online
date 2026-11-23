@@ -458,6 +458,11 @@ void srv_tick(srv *s, uint64_t now_ms) {
     }
 }
 
+void srv_wait(srv *s, uint32_t timeout_ms) {
+    if (!s->started || !s->enet) { clk_sleep_until_ns(clk_now_ns() + (uint64_t)timeout_ms * 1000000u); return; }
+    psp_net_enet_service(s->enet, timeout_ms, on_packet, s);
+}
+
 void srv_stop(srv *s) {
     if (s->enet) {
         psp_net_enet_disconnect_all(s->enet, PSP_MMO_DISC_SHUTDOWN);

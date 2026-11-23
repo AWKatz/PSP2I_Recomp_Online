@@ -247,7 +247,12 @@ int main(int argc, char **argv) {
                   (unsigned long long)st.rare_drops);
             stat_t = done; stat_cpu = cpu; stat_ticks = ticks;
         }
-        clk_sleep_until_ns(next);
+        /* until the next tick: wait on the network, relaying as packets arrive */
+        for (uint64_t now = clk_now_ns(); now < next; now = clk_now_ns()) {
+            const uint64_t left_ms = (next - now) / 1000000u;
+            if (left_ms == 0) { clk_sleep_until_ns(next); break; }
+            srv_wait(s, (uint32_t)left_ms);
+        }
     }
 
     const double up = (double)(clk_now_ns() - t0) / 1e9;

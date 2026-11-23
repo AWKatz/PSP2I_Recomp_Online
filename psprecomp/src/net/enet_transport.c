@@ -299,6 +299,17 @@ static int t_poll_packets(void *ctx, psp_net_packet_fn fn, void *user) {
 
 /* ---- public ---------------------------------------------------------------------------- */
 
+int psp_net_enet_service(psp_net_enet *e, uint32_t timeout_ms, psp_net_packet_fn fn, void *user) {
+    if (!e->host) return PSP_NET_ERR_NOT_INIT;
+    ENetEvent ev;
+    int count = 0;
+    if (enet_host_service(e->host, &ev, timeout_ms) > 0) {
+        count += handle_event(e, &ev, fn, user);
+        while (enet_host_service(e->host, &ev, 0) > 0) count += handle_event(e, &ev, fn, user);
+    }
+    return count;
+}
+
 psp_net_enet *psp_net_enet_create(const psp_net_enet_config *cfg) {
     psp_net_enet *e = calloc(1, sizeof *e);
     if (!e) return NULL;

@@ -56,6 +56,10 @@ uint64_t psp_net_enet_self_id(const psp_net_enet *e);
 /* Connected, welcomed peers (host: clients; client: 1 once joined). */
 int      psp_net_enet_peer_count(const psp_net_enet *e);
 
+/* Wait up to timeout_ms for network traffic and handle it (relays included),
+ * delivering packets to fn: a server sleeps here between ticks instead of
+ * in a plain sleep, so it relays the moment a packet arrives. */
+int      psp_net_enet_service(psp_net_enet *e, uint32_t timeout_ms, psp_net_packet_fn fn, void *user);
 /* Host: let a peer's packets be relayed (relay_authorized_only). */
 int      psp_net_enet_authorize(psp_net_enet *e, uint64_t id, int on);
 /* Host: disconnect a peer; `reason` reaches the client (PSP_MMO_DISC_*). */
