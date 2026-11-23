@@ -2,7 +2,10 @@
 
 <p align="center">
    <img src="asset/Logo.png" alt="Icon">
-<img width="1072" height="688" alt="Screenshot 2026-11-22 at 2 15 07 PM" src="https://github.com/user-attachments/assets/448d059a-fbe5-439f-8fba-1b685340e1c0" />
+<img width="1072" height="684" alt="Screenshot 2026-11-22 at 6 17 27 PM" src="https://github.com/user-attachments/assets/5928fb23-a0ef-4985-99ac-99bd553b3e49" />
+<img width="1072" height="684" alt="Screenshot 2026-11-22 at 6 15 17 PM" src="https://github.com/user-attachments/assets/c2309d21-c338-4c73-890c-2ac3cc5242ef" />
+<img width="1072" height="684" alt="Screenshot 2026-11-22 at 6 14 13 PM" src="https://github.com/user-attachments/assets/d6768855-1761-4723-90a3-284ba5190348" />
+
 
 
 </p>
