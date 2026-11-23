@@ -7,6 +7,7 @@
 #include <psprecomp/hle.h>
 #include <psprecomp/mem.h>
 #include <psprecomp/net.h>
+#include <psprecomp/net_proto.h>
 
 #include <stdio.h>
 
@@ -26,11 +27,13 @@
  * vfunc +88) and the 56-byte equip message to every player (room vfunc +140). */
 static const uint32_t RA_EQUIP_NOTICE[] = { 0x0882A4C0u, 0x08D1EF68u, 0x08D1F29Cu };
 
+#define LOBBY_DEST 2010000
 #define LOBBY_TYPE 2
 #define LOBBY_ZONE 2000
 
 static struct { volatile int pending; int32_t dest; int16_t idx, zone, entry; } g_warp;
 static volatile int g_weapons;
+static int g_entry = 4;              /* the room this client is in (the plaza, where Multi Mode starts) */
 
 int lobby_here(void) {
     const uint32_t m = psp_read32(AREA_MANAGER);
@@ -42,14 +45,26 @@ void lobby_warp(int32_t dest, int16_t area_index, int16_t zone, int16_t entry) {
     g_warp.pending = 1;
 }
 
+int  lobby_entry(void) { return g_entry; }
 void lobby_set_weapons(int on) { g_weapons = on ? 1 : 0; }
 int  lobby_weapons(void) { return g_weapons; }
 
 static void hook_area_update(void (*original)(void)) {
     psp_net_mmo_warp w;
-    if (psp_net_mmo_take_warp(&w)) lobby_warp(w.dest, w.area_index, w.zone, w.entry);   /* the leader's choice */
+    if (psp_net_mmo_take_warp(&w)) {                       /* the leader's choice, with the party's lobby options */
+        if (w.flags & PSP_MMO_WARP_OPTIONS) g_weapons = (w.flags & PSP_MMO_WARP_WEAPONS) != 0;
+        lobby_warp(w.dest, w.area_index, w.zone, w.entry);
+    }
+    {   /* the room a move into the lobby is going to (the game mode's destination +536 / entry +548) */
+        const uint32_t mode = psp_read32(GAME_MODE);
+        if (mode && (int32_t)psp_read32(mode + 536) == LOBBY_DEST) {
+            const int32_t e = (int32_t)psp_read32(mode + 548);
+            if (e >= 0 && e <= 6) g_entry = e;
+        }
+    }
     if (g_warp.pending) {
         g_warp.pending = 0;
+        if (g_warp.dest == LOBBY_DEST) g_entry = g_warp.entry;
         const uint32_t mode = psp_read32(GAME_MODE);
         if (mode) {
             psp_net_log("lobby: warp to destination %d, area index %d, zone %d, entry %d", g_warp.dest, g_warp.idx, g_warp.zone, g_warp.entry);

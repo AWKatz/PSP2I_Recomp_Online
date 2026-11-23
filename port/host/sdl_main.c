@@ -773,7 +773,7 @@ static void test_input(uint32_t *buttons) {
     if (!strcmp(c, "tracestart")) { at_start(); return; }
     if (!strcmp(c, "tracestop")) { at_stop(); return; }
 #ifdef PSPRECOMP_MMO_NET
-    if (!strncmp(c, "lobbyweapons", 12)) { party_ui_set_weapons(atoi(c + 12) != 0); return; }
+    if (!strncmp(c, "lobbyweapons", 12)) { lobby_set_weapons(atoi(c + 12) != 0); return; }
 #endif
     if (!strcmp(c, "unwatch")) { g_tw.n = 0; if (g_tw.f) { fclose(g_tw.f); g_tw.f = NULL; } return; }
     if (!strncmp(c, "stick", 5) && c[5]) {           /* stick<u|d|l|r><ms>: the analog stick held fully over */
@@ -821,7 +821,6 @@ static void on_vblank(void) {
         uint32_t inject = 0;
         const int was_open = party_ui_open();
         const int grab = party_ui_update(g_menu.open ? 0 : held & ~MI_TOGGLE, g_menu.open ? 0 : g_party_latched, &inject);
-        lobby_set_weapons(party_ui_weapons());          /* the lobby menu's option */
         g_party_latched = 0;
         /* open, or closed by this very press: what is held now is the panel's, not the game's */
         if (grab || was_open || grabbed) hide = pad | g_touch_bits;

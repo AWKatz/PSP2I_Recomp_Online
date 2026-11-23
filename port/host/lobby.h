@@ -26,7 +26,12 @@ int  lobby_here(void);
  * the lobby is 2010000, area index 0, zone 2000). Runs on the next frame. */
 void lobby_warp(int32_t dest, int16_t area_index, int16_t zone, int16_t entry);
 
-/* Weapons in the lobby. The palette appears from the next lobby entry. */
+/* The lobby room this client is in (its entry point: 0 Bridge, 1 Deck,
+ * 2 Cafe, 3 Shop Plaza, 4 Central Plaza, 5 Counter Room). */
+int  lobby_entry(void);
+
+/* Weapons in the lobby. A change shows fully after re-entering the room
+ * (a warp): on, the palette appears; off, drawn weapons are put away. */
 void lobby_set_weapons(int on);
 int  lobby_weapons(void);
 

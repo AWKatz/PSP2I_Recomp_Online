@@ -109,7 +109,7 @@ void psp_net_mmo_set_join_target(const uint8_t mac[6]);
 /* Party warps: a leader sends one (the server passes it to the leader and its
  * members); every client takes the one it receives with psp_net_mmo_take_warp
  * (1 = a warp arrived; once each). */
-typedef struct { int32_t dest; int16_t area_index, zone, entry; } psp_net_mmo_warp;
+typedef struct { int32_t dest; int16_t area_index, zone, entry; uint16_t flags; } psp_net_mmo_warp;   /* flags: PSP_MMO_WARP_* */
 void psp_net_mmo_party_warp(const psp_net_mmo_warp *w);
 int  psp_net_mmo_take_warp(psp_net_mmo_warp *out);
 int  psp_net_mmo_join_target(uint8_t mac[6]);      /* 1 when one is set */

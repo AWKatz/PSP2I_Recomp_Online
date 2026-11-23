@@ -60,7 +60,7 @@ The lobby is a town. Two separate things keep weapons out of it:
 
    Passing those three makes the weapon appear for the player and for everyone else.
 
-The lobby menu's "Weapons in the lobby" does both (`port/host/lobby.c`). Armour changes always worked in the lobby: they take a different message (0x0105 with +6 = 7), which the server handles in any room.
+The lobby menu's "Weapons in the lobby" does both (`port/host/lobby.c`). It is the party leader's setting: it travels in every party warp (MSG_S2C_PARTY_WARP flags), and switching it warps the party back into its room. Re-entering the room is what makes it apply: on, the palette appears; off, drawn weapons are put away (the town checks alone only hide the palette). Armour changes always worked in the lobby: they take a different message (0x0105 with +6 = 7), which the server handles in any room.
 
 How it was found: function traces of the same palette switch in a field and in the lobby, then the lobby weapon switch against a lobby armour switch (the `tracestart` / `tracestop` test commands in a `-DPSP2I_TRACE=ON` build). Things that did not matter: the scene mode (0x08EDA010), the "battle allowed" check (`0x08A38E2C`), the items' +32 flag and the lobby motion sets.
 

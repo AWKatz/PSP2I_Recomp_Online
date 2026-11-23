@@ -16,8 +16,9 @@
  *   - Anything that does not happen in time hands control back, with a notice.
  *   - In the Multi Mode lobby, F2 / L3 opens the lobby menu instead: the party
  *     leader warps the whole party to one of the lobby's rooms (sent through
- *     the server: psp_net_mmo_party_warp), and "weapons in the lobby" can be
- *     switched on or off.
+ *     the server: psp_net_mmo_party_warp), and switches "weapons in the lobby"
+ *     on or off for the whole party (sent with the warps; a switch re-enters
+ *     the room so it shows at once). Members see both, greyed.
  * While the panel is open, the game gets no input. */
 #ifndef PSP2I_PARTY_UI_H
 #define PSP2I_PARTY_UI_H
@@ -39,8 +40,6 @@ int party_ui_draw(menu_image *img, int *x, int *y, int *w, int *h);
 
 int party_ui_open(void);
 
-/* The lobby menu's "weapons in the lobby" option (F2 / L3 in the lobby). */
-int  party_ui_weapons(void);
-void party_ui_set_weapons(int on);
+
 
 #endif

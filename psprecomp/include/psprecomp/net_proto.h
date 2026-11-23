@@ -52,6 +52,7 @@ enum { PSP_MMO_PARTY_ENTRY_LEN = 6 + 4 + 32, PSP_MMO_PARTY_LIST_MAX = 32,
  * takes it from a party leader only and sends it to the leader and every
  * session whose reported leader is that leader. */
 enum { PSP_MMO_PARTY_WARP_LEN = 8 + 12 };
+enum { PSP_MMO_WARP_OPTIONS = 1, PSP_MMO_WARP_WEAPONS = 2 };   /* flags: options are set; weapons in the lobby */
 
 /* MSG_S2C_SYSTEM_NOTICE: hdr, colour u32 (0xRRGGBB), text[128] (UTF-8, NUL-padded) */
 enum { PSP_MMO_NOTICE_TEXT_LEN = 128, PSP_MMO_NOTICE_LEN = 8 + 4 + PSP_MMO_NOTICE_TEXT_LEN };

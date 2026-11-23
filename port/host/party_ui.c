@@ -50,12 +50,13 @@ static struct {
     /* a notice at the top of the picture */
     char notice[96];
     int notice_left;
-    int weapons;                 /* the lobby menu's "weapons in the lobby" option */
 } U;
 
 static int in_lobby(void) { return lobby_here(); }
-int party_ui_weapons(void) { return U.weapons; }
-void party_ui_set_weapons(int on) { U.weapons = on ? 1 : 0; }
+/* The leader's lobby options, sent with every warp so the party matches. */
+static uint16_t lobby_flags(void) {
+    return PSP_MMO_WARP_OPTIONS | (lobby_weapons() ? PSP_MMO_WARP_WEAPONS : 0);
+}
 
 void party_ui_init(int auto_open) {
     memset(&U, 0, sizeof U);
@@ -92,7 +93,7 @@ static void open_lobby(void) {
 static void choose_lobby(int row, int role) {
     if (row < NROOMS) {
         if (role != PSP_MMO_PARTY_LEADER) { notice("Only the party leader can warp the party.", 4); return; }
-        const psp_net_mmo_warp w = { LOBBY_DEST, 0, LOBBY_ZONE, (int16_t)ROOMS[row].entry };
+        const psp_net_mmo_warp w = { LOBBY_DEST, 0, LOBBY_ZONE, (int16_t)ROOMS[row].entry, lobby_flags() };
         psp_net_mmo_party_warp(&w);
         char m[96];
         snprintf(m, sizeof m, "Warping the party to the %s...", ROOMS[row].name);
@@ -100,9 +101,13 @@ static void choose_lobby(int row, int role) {
         U.state = ST_HIDDEN;
         return;
     }
-    if (row == NROOMS) {
-        U.weapons = !U.weapons;
-        notice(U.weapons ? "Weapons in the lobby: on (the palette appears from the next lobby entry)" : "Weapons in the lobby: off", 4);
+    if (row == NROOMS) {   /* the leader's choice for the party; the room is re-entered so it shows at once */
+        if (role != PSP_MMO_PARTY_LEADER) { notice("Only the party leader can change this.", 4); return; }
+        lobby_set_weapons(!lobby_weapons());
+        const psp_net_mmo_warp w = { LOBBY_DEST, 0, LOBBY_ZONE, (int16_t)lobby_entry(), lobby_flags() };
+        psp_net_mmo_party_warp(&w);
+        notice(lobby_weapons() ? "Weapons in the lobby: on" : "Weapons in the lobby: off", 4);
+        U.state = ST_HIDDEN;
         return;
     }
     U.state = ST_HIDDEN;
@@ -324,9 +329,9 @@ int party_ui_draw(menu_image *img, int *bx, int *by, int *bw, int *bh) {
         char line[96];
         for (int i = 0; i < rows; i++) {
             const int ly = y + 38 + i * 12 + (i >= NROOMS ? 6 : 0);
-            uint32_t col = i < NROOMS && !leader ? GREY : WHITE;
+            uint32_t col = i <= NROOMS && !leader ? GREY : WHITE;
             if (i < NROOMS) snprintf(line, sizeof line, "%s", ROOMS[i].name);
-            else if (i == NROOMS) snprintf(line, sizeof line, "Weapons in the lobby: %s", U.weapons ? "ON" : "OFF");
+            else if (i == NROOMS) snprintf(line, sizeof line, "Weapons in the lobby: %s%s", lobby_weapons() ? "ON" : "OFF", leader ? "" : " (leader)");
             else snprintf(line, sizeof line, "Close");
             if (i == U.sel) { fill(img, x + 6, ly - 2, w - 12, 11, 0xFF304878); if (col == WHITE) col = YELLOW; }
             menu_text(img, x + 12, ly, line, col);

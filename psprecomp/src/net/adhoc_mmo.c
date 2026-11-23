@@ -158,6 +158,7 @@ void psp_net_mmo_party_warp(const psp_net_mmo_warp *w) {
     psp_mmo_put_u16(m + 12, (uint16_t)w->area_index);
     psp_mmo_put_u16(m + 14, (uint16_t)w->zone);
     psp_mmo_put_u16(m + 16, (uint16_t)w->entry);
+    psp_mmo_put_u16(m + 18, w->flags);
     ctrl_send(m, sizeof m);
 }
 
@@ -356,9 +357,10 @@ static void on_packet(const psp_net_packet *p, void *user) {
         g_warp_in.area_index = (int16_t)psp_mmo_get_u16(d + 12);
         g_warp_in.zone = (int16_t)psp_mmo_get_u16(d + 14);
         g_warp_in.entry = (int16_t)psp_mmo_get_u16(d + 16);
+        g_warp_in.flags = psp_mmo_get_u16(d + 18);
         g_warp_have = 1;
-        psp_net_log("mmo: party warp to destination %d, area index %d, zone %d, entry %d", g_warp_in.dest, g_warp_in.area_index,
-                    g_warp_in.zone, g_warp_in.entry);
+        psp_net_log("mmo: party warp to destination %d, area index %d, zone %d, entry %d, flags 0x%X", g_warp_in.dest, g_warp_in.area_index,
+                    g_warp_in.zone, g_warp_in.entry, g_warp_in.flags);
     } else {
         psp_net_log("mmo: control message 0x%04X (%u bytes) ignored", type, p->len);
     }
