@@ -641,16 +641,16 @@ static void present(void) {
  * cross square triangle up down left right l r f2 (the party finder),
  * wait<ms> (e.g. wait500), stick<u|d|l|r><ms> (the analog stick held over;
  * sticku2000), dump (a RAM snapshot, as F7 with PSP2I_RAMDUMP),
- * watch<hex addr> / unwatch (float triples to logs/watch.txt, 20 a second), shot (the window's picture to logs/shot_<n>.png). Each press is held 100 ms, then 200 ms released.
+ * watch<hex addr> / unwatch (float triples to logs/watch.txt, 20 a second; watchevery<n>: every n vblanks), shot (the window's picture to logs/shot_<n>.png). Each press is held 100 ms, then 200 ms released.
  * The file is taken (renamed, read, deleted) every 100 ms; a script appends
  * to it with `echo circle >> logs/input.cmd`. */
 static void ram_dump(void);
 /* watch: float triples sampled every 3 vblanks (20 a second) to logs/watch.txt,
  * one line per sample: vblank, then x y z for each watched address */
-static struct { uint32_t a[8]; int n; unsigned long vb; FILE *f; } g_tw;
+static struct { uint32_t a[8]; int n, every; unsigned long vb; FILE *f; } g_tw;
 static void test_watch(void) {
     g_tw.vb++;
-    if (!g_tw.n || g_tw.vb % 3) return;
+    if (!g_tw.n || g_tw.vb % (unsigned long)(g_tw.every > 0 ? g_tw.every : 3)) return;
     if (!g_tw.f) {
         char path[1100];
         snprintf(path, sizeof path, "%s/logs/watch.txt", g_base);
@@ -748,6 +748,7 @@ static void test_input(uint32_t *buttons) {
     if (!strcmp(c, "f2")) { g_ti.f2 = 1; g_ti.gap = 12; return; }
     if (!strcmp(c, "shot")) { g_ti.shot = 1; return; }
     if (!strcmp(c, "dump")) { ram_dump(); return; }
+    if (!strncmp(c, "watchevery", 10)) { g_tw.every = atoi(c + 10); return; }
     if (!strncmp(c, "watch", 5) && c[5]) {           /* watch<hex addr>: log the float triple there */
         if (g_tw.n < 8) g_tw.a[g_tw.n++] = (uint32_t)strtoul(c + 5, NULL, 16);
         return;
