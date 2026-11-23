@@ -27,7 +27,9 @@ int  lobby_here(void);
 void lobby_warp(int32_t dest, int16_t area_index, int16_t zone, int16_t entry);
 
 /* The lobby room this client is in (its entry point: 0 Bridge, 1 Deck,
- * 2 Cafe, 3 Shop Plaza, 4 Central Plaza, 5 Counter Room). */
+ * 2 Cafe, 3 Shop Plaza, 4 Central Plaza, 5 Counter Room, 9 Battle Shop,
+ * 11 Style Shop, 15 the Style Shop's Salon, 17 Little Wing; the others are
+ * spots in the plaza). */
 int  lobby_entry(void);
 
 /* Weapons in the lobby. A change shows fully after re-entering the room

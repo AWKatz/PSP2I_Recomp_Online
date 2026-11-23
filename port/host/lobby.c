@@ -10,6 +10,7 @@
 #include <psprecomp/net_proto.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #define AREA_MANAGER   0x08ED4DD0u   /* *: the area manager; current area (type u32, zone s16) at +40 / +44 */
 #define GAME_MODE      0x08ED2958u   /* *: the game mode object */
@@ -59,7 +60,7 @@ static void hook_area_update(void (*original)(void)) {
         const uint32_t mode = psp_read32(GAME_MODE);
         if (mode && (int32_t)psp_read32(mode + 536) == LOBBY_DEST) {
             const int32_t e = (int32_t)psp_read32(mode + 548);
-            if (e >= 0 && e <= 6) g_entry = e;
+            if (e >= 0 && e <= 17) g_entry = e;
         }
     }
     if (g_warp.pending) {
@@ -89,7 +90,25 @@ static void hook_no_field(void (*original)(void)) {
         if (ra == RA_EQUIP_NOTICE[i] && lobby_here()) { psp_cpu.r[2] = 0; return; }
 }
 
+/* Research (PSP2I_QUEST_TRACE=1): quest tables asked for by id, and the
+ * client's quest-table requests. */
+static void hook_quest_table(void (*original)(void)) {
+    const int32_t id = (int32_t)psp_cpu.r[5];
+    const uint32_t ra = psp_cpu.r[31];
+    original();
+    psp_net_log("lobby: quest table %d -> %s (caller 0x%08X)", id, psp_cpu.r[2] ? "loaded" : "not loaded", ra);
+}
+static void hook_table_request(void (*original)(void)) {
+    psp_net_log("lobby: quest table request: table %d, slot %d, mode %d (caller 0x%08X)", (int32_t)psp_cpu.r[6], (int32_t)psp_cpu.r[7],
+                (int32_t)psp_cpu.r[8], psp_cpu.r[31]);
+    original();
+}
+
 void lobby_init(void) {
+    if (getenv("PSP2I_QUEST_TRACE")) {
+        psp_hook_set(0x08D25714u, hook_quest_table);
+        psp_hook_set(0x0888B62Cu, hook_table_request);
+    }
     psp_hook_set(FN_AREA_UPDATE, hook_area_update);
     psp_hook_set(FN_IS_TOWN, hook_is_town);
     psp_hook_set(FN_IS_TOWN2, hook_is_town);

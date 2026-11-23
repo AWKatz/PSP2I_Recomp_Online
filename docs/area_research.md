@@ -46,7 +46,7 @@ The move path, as logged on both clients during a lobby → mission → lobby tr
 | `warp2010000,0,2000,5` | lobby: a counter room with four boards |
 | `warp2010000,0,2300,0` | an empty void: the area index has no map for that zone; nothing crashed |
 
-Rooms for entries 2 and 3 still need screenshots. Other social areas (the city, casino, beach and so on) need their quest table loaded first, which is the next research step (the request task at `0x0888B62C`).
+More entry points (named in game, 2026-11-23): 9 Battle Shop, 11 Style Shop, 15 and 16 the Style Shop's Salon, 17 Little Wing (any entry above 17 also lands there); 6, 8, 10, 12, 13 and 14 are spots in the plaza by its doors and gates, 7 another spot on the Observation Deck. Entry 2 is the Cafe, 3 the Shop Plaza. Other social areas (the city, casino, beach and so on) need their quest table loaded first, which is the next research step (the request task at `0x0888B62C`).
 
 ## Weapons in the lobby (option 1): working
 

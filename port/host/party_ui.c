@@ -21,7 +21,8 @@ enum { ST_HIDDEN, ST_LIST, ST_LOBBY };
  * options. */
 static const struct { const char *name; int entry; } ROOMS[] = {
     { "Central Plaza", 4 }, { "Shop Plaza", 3 }, { "Bridge (mission terminal)", 0 }, { "Counter Room", 5 },
-    { "Cafe", 2 }, { "Observation Deck", 1 },
+    { "Cafe", 2 }, { "Observation Deck", 1 }, { "Battle Shop", 9 }, { "Style Shop", 11 }, { "Style Shop: Salon", 15 },
+    { "Little Wing", 17 },
 };
 #define NROOMS ((int)(sizeof ROOMS / sizeof ROOMS[0]))
 #define LOBBY_DEST 2010000
