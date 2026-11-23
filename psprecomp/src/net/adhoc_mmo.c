@@ -53,6 +53,11 @@ static void hle_traced(void) {
 
 /* ---- the handshake ---------------------------------------------------------------------------- */
 
+static int g_adhocctl;                       /* sceNetAdhocctlInit seen: the game is in Multi Mode */
+static int g_party_role, g_party_members, g_party_max, g_party_open;
+static uint8_t g_party_leader[6];
+static void party_send(void);
+
 static int mmo_connect(void) {
     const psp_net_transport *t = psp_net_get_transport();
     if (t == psp_net_null_transport()) { psp_net_log("mmo: no transport installed"); return -1; }
@@ -72,8 +77,98 @@ static int mmo_connect(void) {
     psp_net_log("mmo: sent MSG_C2S_HANDSHAKE to %s (%u bytes, mac %02X:%02X:%02X:%02X:%02X:%02X, name '%s') -> %d",
                 g_server, (unsigned)sizeof m, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], g_name, rc);
     g_joined = rc == PSP_NET_OK;
+    if (g_joined && g_party_role) party_send();
     return g_joined ? 0 : -1;
 }
+
+int psp_net_mmo_connect(void) { return g_joined ? 0 : mmo_connect(); }
+int psp_net_mmo_connected(void) { return g_joined; }
+
+/* ---- the party directory ------------------------------------------------------------------ */
+
+static void ctrl_send(const uint8_t *m, uint32_t len) {
+    if (!g_joined) return;
+    const psp_net_transport *t = psp_net_get_transport();
+    psp_net_peer server = { { 0 }, 1 };
+    t->send_packet(t->ctx, &server, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, m, len);
+}
+
+static void party_send(void) {
+    uint8_t m[PSP_MMO_PARTY_STATE_LEN];
+    psp_mmo_put_hdr(m, MSG_C2S_PARTY_STATE);
+    m[8] = (uint8_t)g_party_role; m[9] = (uint8_t)g_party_members; m[10] = (uint8_t)g_party_max; m[11] = (uint8_t)g_party_open;
+    memcpy(m + 12, g_party_leader, 6);
+    ctrl_send(m, sizeof m);
+}
+
+void mmo_party_report(int role, int members, int max, int open, const uint8_t leader_mac[6]) {
+    uint8_t lm[6] = { 0 };
+    if (leader_mac) memcpy(lm, leader_mac, 6);
+    if (role == g_party_role && members == g_party_members && max == g_party_max && open == g_party_open && !memcmp(lm, g_party_leader, 6))
+        return;
+    if (role != g_party_role)
+        psp_net_log("mmo: party role %s", role == PSP_MMO_PARTY_LEADER ? "leader" : role == PSP_MMO_PARTY_MEMBER ? "member" : "none");
+    g_party_role = role; g_party_members = members; g_party_max = max; g_party_open = open;
+    memcpy(g_party_leader, lm, 6);
+    if (role != PSP_MMO_PARTY_NONE) psp_net_mmo_set_join_target(NULL);   /* in a party: steering is done */
+    party_send();
+}
+
+int psp_net_mmo_party_role(void) { return g_party_role; }
+
+void psp_net_mmo_get_status(psp_net_mmo_status *o) {
+    memset(o, 0, sizeof *o);
+    o->adhocctl = g_adhocctl;
+    mmo_matching_status(&o->matching_mode, &o->matching_running, &o->established, &o->target_seen);
+}
+
+static psp_net_mmo_party g_parties[PSP_MMO_PARTY_LIST_MAX];
+static int g_nparties, g_players_online;
+static unsigned g_parties_gen;
+
+void psp_net_mmo_request_parties(void) {
+    uint8_t m[PSP_MMO_PARTY_LIST_REQ_LEN];
+    psp_mmo_put_hdr(m, MSG_C2S_PARTY_LIST_REQ);
+    ctrl_send(m, sizeof m);
+}
+
+int psp_net_mmo_parties(psp_net_mmo_party *out, int max, int *players, unsigned *generation) {
+    const int n = g_nparties < max ? g_nparties : max;
+    if (out && n > 0) memcpy(out, g_parties, (size_t)n * sizeof *out);
+    if (players) *players = g_players_online;
+    if (generation) *generation = g_parties_gen;
+    return n;
+}
+
+static void on_party_list(const uint8_t *d, uint32_t len) {
+    if (len < PSP_MMO_PARTY_LIST_HDR_LEN) return;
+    int n = psp_mmo_get_u16(d + 10);
+    if (n > PSP_MMO_PARTY_LIST_MAX) n = PSP_MMO_PARTY_LIST_MAX;
+    if (len < (uint32_t)(PSP_MMO_PARTY_LIST_HDR_LEN + n * PSP_MMO_PARTY_ENTRY_LEN)) return;
+    g_players_online = psp_mmo_get_u16(d + 8);
+    for (int i = 0; i < n; i++) {
+        const uint8_t *e = d + PSP_MMO_PARTY_LIST_HDR_LEN + i * PSP_MMO_PARTY_ENTRY_LEN;
+        psp_net_mmo_party *p = &g_parties[i];
+        memcpy(p->leader_mac, e, 6);
+        p->members = e[6]; p->max = e[7]; p->open = e[8];
+        memcpy(p->leader_name, e + 10, 32); p->leader_name[32] = 0;
+    }
+    g_nparties = n;
+    if (!++g_parties_gen) g_parties_gen = 1;
+}
+
+static int g_has_target;
+static uint8_t g_target[6];
+
+void psp_net_mmo_set_join_target(const uint8_t mac[6]) {
+    g_has_target = mac != NULL;
+    if (mac) {
+        memcpy(g_target, mac, 6);
+        psp_net_log("mmo: Join Party steered to %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    }
+}
+int psp_net_mmo_join_target(uint8_t mac[6]) { if (g_has_target && mac) memcpy(mac, g_target, 6); return g_has_target; }
+int mmo_join_target_allows(const uint8_t mac[6]) { return !g_has_target || !memcmp(mac, g_target, 6); }
 
 /* sceNetAdhocctlInit(stacksize, priority, product) */
 static void hle_AdhocctlInit(void) {
@@ -81,7 +176,15 @@ static void hle_AdhocctlInit(void) {
     if (psp_arg(2)) psp_mem_read_block(product, psp_arg(2) + 4, 9);
     psp_net_log("mmo: sceNetAdhocctlInit(stack 0x%X, prio %u, product '%s')", psp_arg(0), psp_arg(1), product);
     if (!g_joined) mmo_connect();
+    g_adhocctl = 1;
     psp_ret(0);   /* the library starts either way, as it would on a PSP */
+}
+
+/* sceNetAdhocctlTerm(): the game left Multi Mode */
+static void hle_AdhocctlTerm(void) {
+    g_adhocctl = 0;
+    psp_net_log("mmo: sceNetAdhocctlTerm");
+    psp_ret(0);
 }
 
 /* ---- Adhocctl event handlers ------------------------------------------------------------------- */
@@ -217,6 +320,8 @@ static void on_packet(const psp_net_packet *p, void *user) {
         uint64_t sid = 0; for (int i = 7; i >= 0; i--) sid = (sid << 8) | d[4 + i];
         g_session = sid;
         psp_net_log("mmo: MSG_S2C_HANDSHAKE_ACK status %u, session %llu", status, (unsigned long long)sid);
+    } else if (type == MSG_S2C_PARTY_LIST) {
+        on_party_list(p->data, p->len);
     } else {
         psp_net_log("mmo: control message 0x%04X (%u bytes) ignored", type, p->len);
     }
@@ -244,6 +349,7 @@ void psp_net_mmo_register(void) {
         psp_hle_register(nid, lib, name, hle_traced);
     }
     psp_hle_register(0xE26F226E, "sceNetAdhocctl", "sceNetAdhocctlInit", hle_AdhocctlInit);
+    psp_hle_register(0x9D689E13, "sceNetAdhocctl", "sceNetAdhocctlTerm", hle_AdhocctlTerm);
     psp_hle_register(0x20B317A0, "sceNetAdhocctl", "sceNetAdhocctlAddHandler", hle_AdhocctlAddHandler);
     psp_hle_register(0x6402490B, "sceNetAdhocctl", "sceNetAdhocctlDelHandler", hle_AdhocctlDelHandler);
     psp_hle_register(0x75ECD386, "sceNetAdhocctl", "sceNetAdhocctlGetState", hle_AdhocctlGetState);

@@ -41,7 +41,7 @@ if(TARGET psp2i_atrac)
 endif()
 
 if(ENABLE_MMO_NET)   # psprecomp's option: the MMO client start-up
-    target_sources(psp2i PRIVATE ${PORT}/host/mmo_client.c)
+    target_sources(psp2i PRIVATE ${PORT}/host/mmo_client.c ${PORT}/host/party_ui.c)
 endif()
 
 option(PSP2I_LIBAV "Decode movie video with FFmpeg" ON)

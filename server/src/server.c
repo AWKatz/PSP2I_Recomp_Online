@@ -31,6 +31,9 @@ typedef struct {
     int      bad_seconds;             /* consecutive seconds with drops */
     uint32_t kick;                    /* PSP_MMO_DISC_* to apply after this poll (0 = none) */
     double   kill_tokens;             /* enemy kill reports: token bucket */
+    /* party directory (MSG_C2S_PARTY_STATE) */
+    uint8_t  party_role, party_members, party_max, party_open;
+    uint8_t  party_leader[6];
 } session;
 
 struct srv {
@@ -316,6 +319,62 @@ int srv_set_rate(srv *s, const char *name, double v) {
 }
 int srv_enemy_count(const srv *s) { return s->loot ? s->loot->n_enemies : 0; }
 
+/* ---- party directory ------------------------------------------------------------------ */
+
+static void on_party_state(srv *s, session *ss, const psp_net_packet *p) {
+    if (p->len != PSP_MMO_PARTY_STATE_LEN) return;
+    const uint8_t *m = p->data + PSP_MMO_HDR_LEN;
+    const uint8_t role = m[0] <= PSP_MMO_PARTY_MEMBER ? m[0] : PSP_MMO_PARTY_NONE;
+    if (role != ss->party_role)
+        slog(s, "party: '%s' %s", ss->name, role == PSP_MMO_PARTY_LEADER ? "is leading a party"
+                                          : role == PSP_MMO_PARTY_MEMBER ? "joined a party" : "left the party");
+    ss->party_role = role;
+    ss->party_members = m[1];
+    ss->party_max = m[2];
+    ss->party_open = m[3] ? 1 : 0;
+    if (role == PSP_MMO_PARTY_LEADER) memcpy(ss->party_leader, ss->mac, 6);   /* a leader leads itself */
+    else memcpy(ss->party_leader, m + 4, 6);
+}
+
+int srv_parties(const srv *s, srv_party *out, int max) {
+    int n = 0;
+    for (int i = 0; i < MAX_SESSIONS && n < max; i++) {
+        const session *ss = &s->sess[i];
+        if (ss->state != SS_ACTIVE || ss->party_role != PSP_MMO_PARTY_LEADER) continue;
+        srv_party *e = &out[n++];
+        memset(e, 0, sizeof *e);
+        e->leader_session = ss->id;
+        memcpy(e->leader_mac, ss->mac, 6);
+        snprintf(e->leader_name, sizeof e->leader_name, "%s", ss->name);
+        e->members = ss->party_members ? ss->party_members : 1;
+        e->max = ss->party_max;
+        e->open = ss->party_open && (!e->max || e->members < e->max);
+    }
+    return n;
+}
+
+static void on_party_list_req(srv *s, session *ss) {
+    srv_party ps[PSP_MMO_PARTY_LIST_MAX];
+    const int n = srv_parties(s, ps, PSP_MMO_PARTY_LIST_MAX);
+    uint8_t m[PSP_MMO_PARTY_LIST_HDR_LEN + PSP_MMO_PARTY_LIST_MAX * PSP_MMO_PARTY_ENTRY_LEN];
+    memset(m, 0, sizeof m);
+    psp_mmo_put_hdr(m, MSG_S2C_PARTY_LIST);
+    psp_mmo_put_u16(m + 8, (uint16_t)count(s, SS_ACTIVE));
+    psp_mmo_put_u16(m + 10, (uint16_t)n);
+    for (int i = 0; i < n; i++) {
+        uint8_t *e = m + PSP_MMO_PARTY_LIST_HDR_LEN + i * PSP_MMO_PARTY_ENTRY_LEN;
+        memcpy(e, ps[i].leader_mac, 6);
+        e[6] = (uint8_t)ps[i].members;
+        e[7] = (uint8_t)ps[i].max;
+        e[8] = (uint8_t)ps[i].open;
+        psp_mmo_put_str(e + 10, ps[i].leader_name, PSP_MMO_NAME_LEN);
+    }
+    const psp_net_transport *t = psp_net_enet_transport(s->enet);
+    const psp_net_peer to = { { 0 }, ss->id };
+    t->send_packet(t->ctx, &to, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, m,
+                   (uint32_t)(PSP_MMO_PARTY_LIST_HDR_LEN + n * PSP_MMO_PARTY_ENTRY_LEN));
+}
+
 static void on_packet(const psp_net_packet *p, void *u) {
     srv *s = u;
     session *ss = find(s, p->from.id);
@@ -332,6 +391,8 @@ static void on_packet(const psp_net_packet *p, void *u) {
     /* Active players: game traffic is relayed by the transport; control
      * messages are handled here. */
     if (type == MSG_C2S_ENEMY_KILLED) on_kill(s, ss, p);
+    else if (type == MSG_C2S_PARTY_STATE) on_party_state(s, ss, p);
+    else if (type == MSG_C2S_PARTY_LIST_REQ) on_party_list_req(s, ss);
 }
 
 /* ---- lifecycle ---------------------------------------------------------------------- */

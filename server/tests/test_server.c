@@ -67,6 +67,8 @@ typedef struct {
     int game_rx;
     int rewards, drops;
     uint32_t last_exp, last_item, last_flags;
+    int party_lists, party_players, party_count, party_members, party_max, party_open;
+    char party_leader[33];
 } client;
 
 static void cl_rx(const psp_net_packet *p, void *u) {
@@ -82,6 +84,16 @@ static void cl_rx(const psp_net_packet *p, void *u) {
         c->drops++;
         c->last_item = psp_mmo_get_u32(p->data + 20);
         c->last_flags = psp_mmo_get_u32(p->data + 28);
+    } else if (p->port == PSP_MMO_CTRL_PORT && psp_mmo_type(p->data, p->len) == MSG_S2C_PARTY_LIST && p->len >= PSP_MMO_PARTY_LIST_HDR_LEN) {
+        c->party_lists++;
+        c->party_players = psp_mmo_get_u16(p->data + 8);
+        c->party_count = psp_mmo_get_u16(p->data + 10);
+        c->party_leader[0] = 0;
+        if (c->party_count && p->len >= PSP_MMO_PARTY_LIST_HDR_LEN + PSP_MMO_PARTY_ENTRY_LEN) {
+            const uint8_t *e = p->data + PSP_MMO_PARTY_LIST_HDR_LEN;
+            c->party_members = e[6]; c->party_max = e[7]; c->party_open = e[8];
+            memcpy(c->party_leader, e + 10, 32); c->party_leader[32] = 0;
+        }
     } else if (p->port != PSP_MMO_CTRL_PORT) {
         c->game_rx++;
     }
@@ -125,6 +137,24 @@ static void cl_broadcast(client *c) {
 static uint32_t cl_wait_disc(client *c, unsigned ms) {
     for (unsigned i = 0; i < ms / 10 && !psp_net_enet_disconnect_reason(c->e); i++) cl_pump(c, 10);
     return psp_net_enet_disconnect_reason(c->e);
+}
+static void cl_ctrl(client *c, const uint8_t *m, uint32_t len) {
+    const psp_net_transport *t = psp_net_enet_transport(c->e);
+    const psp_net_peer host = { { 0 }, 1 };
+    t->send_packet(t->ctx, &host, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, m, len);
+}
+static void cl_party(client *c, uint8_t role, uint8_t members, uint8_t max, uint8_t open) {
+    uint8_t m[PSP_MMO_PARTY_STATE_LEN] = { 0 };
+    psp_mmo_put_hdr(m, MSG_C2S_PARTY_STATE);
+    m[8] = role; m[9] = members; m[10] = max; m[11] = open;
+    cl_ctrl(c, m, sizeof m);
+}
+static void cl_party_list(client *c) {
+    uint8_t m[PSP_MMO_PARTY_LIST_REQ_LEN];
+    psp_mmo_put_hdr(m, MSG_C2S_PARTY_LIST_REQ);
+    const int before = c->party_lists;
+    cl_ctrl(c, m, sizeof m);
+    for (int i = 0; i < 100 && c->party_lists == before; i++) cl_pump(c, 10);
 }
 static void cl_kill(client *c, uint32_t enemy) {
     uint8_t k[PSP_MMO_ENEMY_KILLED_LEN] = { 0 };
@@ -197,6 +227,22 @@ int main(void) {
     cl_pump(&b, 50);
     cl_pump(&a, 150);
     CHECK(a.game_rx == 1);
+
+    /* the party directory: Ann leads, Bob looks */
+    cl_party_list(&b);
+    CHECK(b.party_lists == 1 && b.party_players == 2 && b.party_count == 0);
+    cl_party(&a, PSP_MMO_PARTY_LEADER, 1, 4, 1);
+    cl_pump(&a, 50);
+    cl_party_list(&b);
+    CHECK(b.party_count == 1 && strcmp(b.party_leader, "Ann") == 0 && b.party_members == 1 && b.party_max == 4 && b.party_open == 1);
+    cl_party(&a, PSP_MMO_PARTY_LEADER, 4, 4, 1);                 /* full: listed, not open */
+    cl_pump(&a, 50);
+    cl_party_list(&b);
+    CHECK(b.party_count == 1 && b.party_members == 4 && b.party_open == 0);
+    cl_party(&a, PSP_MMO_PARTY_NONE, 0, 0, 0);
+    cl_pump(&a, 50);
+    cl_party_list(&b);
+    CHECK(b.party_count == 0);
 
     CHECK(cl_join(&c, port, 0xC));                  /* same MAC as Ann */
     cl_handshake(&c, 0xA, "Dup");

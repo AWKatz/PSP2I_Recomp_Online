@@ -6,6 +6,11 @@
 
 int  mmo_net_ready(void);                         /* joined the server: the transport can send */
 
+/* The party directory (adhoc_mmo.c): our role in the game's party, sent to
+ * the server when it changes; the join target (steering). */
+void mmo_party_report(int role, int members, int max, int open, const uint8_t leader_mac[6]);
+int  mmo_join_target_allows(const uint8_t mac[6]);   /* a HELLO from this leader may reach the game */
+
 /* sceNetAdhocMatching (adhoc_matching.c) */
 void mmo_matching_register(void);
 int  mmo_matching_port(void);                     /* its port, or -1 when there is no matching context */

@@ -81,6 +81,7 @@ The keyboard uses PPSSPP's default layout. Click the game window first. A gamepa
 | Start | Space | Start / Menu |
 | Select | V (or Enter) | Back / View |
 | Settings menu | F1 | R3 or Guide |
+| Party finder (MMO builds) | F2 | L3 (left stick click) |
 
 This is the Japanese release, so Circle confirms and Cross cancels. On Windows the keys can be rebound in the settings menu (CONTROLS > KEYBOARD/MOUSE).
 
@@ -168,7 +169,20 @@ Config files:
   - `server_port` (29001);
   - `lan_discovery` (true);
   - `discovery_port` (29000);
-  - `player_name`.
+  - `player_name`;
+  - `party_finder` (true): open the party finder at the Matching Counter.
+
+**Party finder (MMO builds).** In Multi Mode, the Matching Counter opens a panel listing the parties being hosted on the server (leader, members, free slots), plus START A PARTY and CHOOSE MYSELF. Pick a party and the client joins it for you: it presses Join Party, shows the game only that leader's party, and confirms. START A PARTY presses Form Party; Begin Party Play stays with the leader. F2 (keyboard) or L3 (controller) opens and closes the panel. In the panel:
+
+| | Keyboard | Controller |
+| --- | --- | --- |
+| Move | Arrow keys or I / K | D-pad or left stick |
+| Choose | X (Circle) | B / Circle (east) |
+| Close | Z (Cross) | A / Cross (south) |
+
+If a step doesn't happen in time, the finder hands control back with a notice.
+
+**Test switches (any SDL build).** `PSP2I_TEST_INPUT=1` makes the client read button presses from `<data>/logs/input.cmd` (`start`, `circle`, `cross`, `up`, `down`, …, `wait500`, `f2`, and `shot`, which saves the window's picture to `logs/shot_<n>.png`), so test scripts can drive several clients at once without window focus. `PSP2I_NETTRACE=1` logs every ad hoc socket call; `PSP2I_RAMDUMP=1` makes F7 save the game's memory to `logs/`.
 
 More detail: [server/README.md](server/README.md), [port/linux/README.md](port/linux/README.md), [port/macos/README.md](port/macos/README.md).
 
@@ -178,7 +192,7 @@ More detail: [server/README.md](server/README.md), [port/linux/README.md](port/l
 | --- | --- |
 | 1. Client networking: isolated network layer, ENet transport, MMO client entry | done |
 | 2. Dedicated server: headless server, SQLite persistence, server-side loot, web admin | done |
-| 3. Break the 4-player limits | next |
+| 3. Break the 4-player limits | in progress: limits mapped and checked in a live party ([docs/player_limit_offsets.md](docs/player_limit_offsets.md)); party finder |
 
 Details are in [docs/net_hle_audit.md](docs/net_hle_audit.md) and [server/README.md](server/README.md).
 

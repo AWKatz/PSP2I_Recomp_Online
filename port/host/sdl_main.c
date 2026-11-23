@@ -67,9 +67,11 @@
 #include "texpack.h"
 #ifdef PSPRECOMP_MMO_NET
 #include "mmo_client.h"
+#include "party_ui.h"
 #endif
 
 #include <math.h>
+int stbi_write_png(char const *filename, int w, int h, int comp, const void *data, int stride_in_bytes);   /* texpack.c */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -243,6 +245,8 @@ static int g_touch_shown = 1;            /* hidden while a controller is used */
 static uint32_t g_touch_bits;
 static float g_knob_x, g_knob_y;         /* -1..1 */
 static menu_state g_menu;                /* the settings menu */
+static struct { char q[256][12]; int head, n, hold, gap, wait; uint32_t btn; int f2, shot; } g_ti;   /* test input (test_input) */
+static uint32_t g_party_latched;         /* MI_TOGGLE from F2 (the party finder, MMO builds) */
 static uint32_t g_menu_latched;          /* MI_TOGGLE from Back / F1 / the MENU button since the last vblank */
 static int g_menu_fx;                    /* MFX_* from taps on the open menu */
 static int g_vx, g_vy, g_vw, g_vh;       /* the picture's rectangle in the window */
@@ -312,6 +316,7 @@ static SDL_Gamepad *g_pad[MAX_PADS];
 
 static uint8_t stick_byte(int16_t v) { return (uint8_t)((v + 32768) >> 8); }
 static int g_pad_toggle;                 /* R3 or Guide held on a controller: the settings menu */
+static int g_pad_party;                  /* L3 held on a controller: the party finder (MMO builds) */
 
 /* Buttons and the left stick of every controller; the most deflected stick wins. */
 static uint32_t pad_state(uint8_t *ax, uint8_t *ay, uint8_t *rx, uint8_t *ry) {
@@ -325,6 +330,7 @@ static uint32_t pad_state(uint8_t *ax, uint8_t *ay, uint8_t *rx, uint8_t *ry) {
     };
     uint32_t bits = 0;
     g_pad_toggle = 0;
+    g_pad_party = 0;
 #ifndef SDL_PLATFORM_ANDROID
     const bool *keys = SDL_GetKeyboardState(NULL);
     if (SDL_GetKeyboardFocus() == g_win) {
@@ -357,6 +363,7 @@ static uint32_t pad_state(uint8_t *ax, uint8_t *ay, uint8_t *rx, uint8_t *ry) {
         if (abs(u) + abs(v) > rbest) { rbest = abs(u) + abs(v); *rx = stick_byte(u); *ry = stick_byte(v); }
         if (SDL_GetGamepadButton(p, SDL_GAMEPAD_BUTTON_RIGHT_STICK) || SDL_GetGamepadButton(p, SDL_GAMEPAD_BUTTON_GUIDE))
             g_pad_toggle = 1;
+        if (SDL_GetGamepadButton(p, SDL_GAMEPAD_BUTTON_LEFT_STICK)) g_pad_party = 1;
     }
     if (bits || best > 6000 || rbest > 6000) g_touch_shown = 0;   /* a controller is in use */
     if (g_swap_oc && ((bits & P_CIRCLE) != 0) != ((bits & P_CROSS) != 0)) bits ^= P_CIRCLE | P_CROSS;
@@ -400,6 +407,7 @@ static void pump_events(void) {
         case SDL_EVENT_KEY_DOWN:                         /* Android's Back, or F1: the settings menu */
             if (!e.key.repeat && (e.key.key == SDLK_AC_BACK || e.key.key == SDLK_F1)) g_menu_latched |= MI_TOGGLE;
             if (!e.key.repeat && e.key.key == SDLK_F7) ram_dump();
+            if (!e.key.repeat && e.key.key == SDLK_F2) g_party_latched |= MI_TOGGLE;
             break;
         case SDL_EVENT_FINGER_DOWN:   touch_event(&e.tfinger, 1, 0); break;
         case SDL_EVENT_FINGER_MOTION: touch_event(&e.tfinger, 0, 0); break;
@@ -539,6 +547,22 @@ static void draw_menu(void) {
                     bw * g_vw / SCREEN_W, bh * g_vh / SCREEN_H, cw, ch);
 }
 
+#ifdef PSPRECOMP_MMO_NET
+/* The party finder's panel or notice, drawn like the settings menu. */
+static void draw_party(void) {
+    if (g_menu.open || g_vw <= 0) return;
+    static uint32_t px[SCREEN_W * SCREEN_H], box[SCREEN_W * SCREEN_H];
+    menu_image img = { px, SCREEN_W, SCREEN_H };
+    int bx, by, bw, bh;
+    if (!party_ui_draw(&img, &bx, &by, &bw, &bh)) return;
+    for (int y = 0; y < bh; y++) memcpy(box + y * bw, px + (by + y) * SCREEN_W + bx, (size_t)bw * 4);
+    int cw = 0, ch = 0;
+    SDL_GetWindowSizeInPixels(g_win, &cw, &ch);
+    gl_draw_overlay(box, bw, bh, g_vx + bx * g_vw / SCREEN_W, g_vy + by * g_vh / SCREEN_H,
+                    bw * g_vw / SCREEN_W, bh * g_vh / SCREEN_H, cw, ch);
+}
+#endif
+
 /* ---- the picture ---------------------------------------------------------------- */
 
 static uint32_t g_frame[SCREEN_W * SCREEN_H];    /* 0xAARRGGBB */
@@ -587,7 +611,69 @@ static void present(void) {
     draw_fps((cw - vw) / 2, (ch - vh) / 2, vw, cw, ch);
     draw_controls(cw, ch);
     draw_menu();
+#ifdef PSPRECOMP_MMO_NET
+    draw_party();
+#endif
+    if (g_ti.shot) {                                       /* test input: the picture as shown, focus or not */
+        g_ti.shot = 0;
+        static int n;
+        uint8_t *px = malloc((size_t)cw * ch * 4);
+        if (px) {
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+            glReadPixels(0, 0, cw, ch, GL_RGBA, GL_UNSIGNED_BYTE, px);
+            for (int y = 0; y < ch / 2; y++)                 /* bottom-up to top-down */
+                for (int x = 0; x < cw * 4; x++) { uint8_t t = px[y * cw * 4 + x]; px[y * cw * 4 + x] = px[(ch - 1 - y) * cw * 4 + x]; px[(ch - 1 - y) * cw * 4 + x] = t; }
+            for (int i = 0; i < cw * ch; i++) px[i * 4 + 3] = 255;
+            char path[1100];
+            snprintf(path, sizeof path, "%s/logs/shot_%d.png", g_base, n++);
+            stbi_write_png(path, cw, ch, 4, px, cw * 4);
+            fprintf(stderr, "test input: %s\n", path);
+            free(px);
+        }
+    }
     SDL_GL_SwapWindow(g_win);
+}
+
+/* Test input, off unless PSP2I_TEST_INPUT is set: button presses read from
+ * <data>/logs/input.cmd, so a test script can drive several clients at once
+ * without window focus. One command per line or word: start select circle
+ * cross square triangle up down left right l r f2 (the party finder),
+ * wait<ms> (e.g. wait500), shot (the window's picture to logs/shot_<n>.png). Each press is held 100 ms, then 200 ms released.
+ * The file is taken (renamed, read, deleted) every 100 ms; a script appends
+ * to it with `echo circle >> logs/input.cmd`. */
+static void test_input(uint32_t *buttons) {
+    static int on = -1, tick;
+    if (on < 0) on = getenv("PSP2I_TEST_INPUT") != NULL;
+    if (!on) return;
+    if (++tick % 6 == 0) {
+        char path[1100], taken[1110];
+        snprintf(path, sizeof path, "%s/logs/input.cmd", g_base);
+        snprintf(taken, sizeof taken, "%s.taken", path);
+        if (rename(path, taken) == 0) {
+            FILE *f = fopen(taken, "r");
+            char w[32];
+            while (f && fscanf(f, "%31s", w) == 1)
+                if (g_ti.n < 256) { snprintf(g_ti.q[(g_ti.head + g_ti.n) % 256], 12, "%s", w); g_ti.n++; }
+            if (f) fclose(f);
+            remove(taken);
+        }
+    }
+    if (g_ti.hold > 0) { g_ti.hold--; *buttons |= g_ti.btn; return; }
+    if (g_ti.gap > 0) { g_ti.gap--; return; }
+    if (g_ti.wait > 0) { g_ti.wait--; return; }
+    if (!g_ti.n) return;
+    const char *c = g_ti.q[g_ti.head];
+    g_ti.head = (g_ti.head + 1) % 256; g_ti.n--;
+    static const struct { const char *name; uint32_t bit; } B[] = {
+        { "start", P_START }, { "select", P_SELECT }, { "circle", P_CIRCLE }, { "cross", P_CROSS }, { "square", P_SQUARE },
+        { "triangle", P_TRIANGLE }, { "up", P_UP }, { "down", P_DOWN }, { "left", P_LEFT }, { "right", P_RIGHT },
+        { "l", P_L }, { "r", P_R } };
+    if (!strncmp(c, "wait", 4)) { g_ti.wait = atoi(c + 4) * 60 / 1000; return; }
+    if (!strcmp(c, "f2")) { g_ti.f2 = 1; g_ti.gap = 12; return; }
+    if (!strcmp(c, "shot")) { g_ti.shot = 1; return; }
+    for (size_t i = 0; i < sizeof B / sizeof B[0]; i++)
+        if (!strcmp(c, B[i].name)) { g_ti.btn = B[i].bit; g_ti.hold = 6; g_ti.gap = 12; *buttons |= g_ti.btn; fprintf(stderr, "test input: %s\n", c); return; }
+    fprintf(stderr, "test input: unknown command '%s'\n", c);
 }
 
 /* Once per vblank, on the scheduler's clock. */
@@ -596,7 +682,14 @@ static void menu_apply(int fx);
 static void on_vblank(void) {
     pump_events();
     uint8_t ax = 128, ay = 128, rx = 128, ry = 128, tx, ty;
-    const uint32_t pad = pad_state(&ax, &ay, &rx, &ry);
+    uint32_t pad = pad_state(&ax, &ay, &rx, &ry);
+    test_input(&pad);
+    {   /* L3 opens and closes the party finder, as F2 does */
+        static int prev;
+        if (g_pad_party && !prev) g_party_latched |= MI_TOGGLE;
+        prev = g_pad_party;
+    }
+    if (g_ti.f2) { g_ti.f2 = 0; g_party_latched |= MI_TOGGLE; }
     const uint8_t pax = ax, pay = ay;                    /* the controllers' stick, for the menu */
     touch_state(&tx, &ty);
     if (tx != 128 || ty != 128) { ax = tx; ay = ty; }
@@ -605,8 +698,25 @@ static void on_vblank(void) {
     g_menu_latched = 0;
     g_menu_fx = 0;
     menu_apply(fx);
-    const uint32_t game = menu_filter_game(&g_menu, pad | g_touch_bits);
+    uint32_t game = menu_filter_game(&g_menu, pad | g_touch_bits);
     if (g_menu.open) { ax = ay = rx = ry = 128; }
+#ifdef PSPRECOMP_MMO_NET
+    {   /* the party finder: its panel takes the input; its automation presses buttons */
+        static uint32_t hide;                            /* buttons still held from the panel, kept from the game */
+        static int grabbed;
+        uint32_t inject = 0;
+        const int was_open = party_ui_open();
+        const int grab = party_ui_update(g_menu.open ? 0 : held & ~MI_TOGGLE, g_menu.open ? 0 : g_party_latched, &inject);
+        g_party_latched = 0;
+        /* open, or closed by this very press: what is held now is the panel's, not the game's */
+        if (grab || was_open || grabbed) hide = pad | g_touch_bits;
+        else hide &= pad | g_touch_bits;
+        grabbed = grab;
+        if (grab) { game = 0; ax = ay = rx = ry = 128; }
+        else game &= ~hide;
+        game |= inject;
+    }
+#endif
     if (!g_menu.rs_on) rx = ry = 128;                    /* CONTROLS > RIGHT STICK off: no camera */
     psp_ctrl_set(game, ax, ay);
     camera_set_stick(rx, ry);

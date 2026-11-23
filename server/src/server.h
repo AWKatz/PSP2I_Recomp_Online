@@ -73,6 +73,16 @@ loot_rates srv_rates(const srv *s);
 int        srv_set_rate(srv *s, const char *name, double value);
 int        srv_enemy_count(const srv *s);
 
+/* ---- party directory (Multi Mode) ---- */
+typedef struct {
+    uint64_t leader_session;
+    uint8_t  leader_mac[6];
+    char     leader_name[33];
+    int      members, max, open;  /* members with the leader; max 0 = unknown; open = taking members */
+} srv_party;
+/* The parties being hosted, as clients reported them (MSG_C2S_PARTY_STATE). */
+int srv_parties(const srv *s, srv_party *out, int max);
+
 /* ---- admin (Task 2.4) ---- */
 typedef struct {
     uint64_t session;

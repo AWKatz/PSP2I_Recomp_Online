@@ -25,7 +25,25 @@ enum {
     MSG_S2C_KILL_REWARD   = 0x8011,   /* to the killer: experience and type points */
     MSG_S2C_SYSTEM_NOTICE = 0x8020,   /* an announcement for every player's HUD */
     MSG_S2C_SERVER_EVENTS = 0x8021,   /* the active seasonal events / lobby themes */
+    MSG_C2S_PARTY_STATE   = 0x0030,   /* my party role (Multi Mode), whenever it changes */
+    MSG_C2S_PARTY_LIST_REQ = 0x0031,  /* send me the party directory */
+    MSG_S2C_PARTY_LIST    = 0x8030,   /* the party directory: every party a leader is hosting */
 };
+
+/* The party directory (Multi Mode). A client reports its role in the game's
+ * ad hoc party; the server lists the parties being hosted, so a player can
+ * pick one before the game's own Join Party search.
+ * MSG_C2S_PARTY_STATE: hdr, role u8 (PSP_MMO_PARTY_*), members u8 (with the
+ * leader), max u8 (the game's party size), open u8 (1 = taking members),
+ * leader mac[6] (a member: its leader; a leader: itself) */
+enum { PSP_MMO_PARTY_NONE = 0, PSP_MMO_PARTY_LEADER = 1, PSP_MMO_PARTY_MEMBER = 2 };
+enum { PSP_MMO_PARTY_STATE_LEN = 8 + 4 + 6 };
+/* MSG_C2S_PARTY_LIST_REQ: hdr */
+enum { PSP_MMO_PARTY_LIST_REQ_LEN = 8 };
+/* MSG_S2C_PARTY_LIST: hdr, players online u16, count u16, then count entries:
+ * leader mac[6], members u8, max u8, open u8, pad u8, leader name[32] */
+enum { PSP_MMO_PARTY_ENTRY_LEN = 6 + 4 + 32, PSP_MMO_PARTY_LIST_MAX = 32,
+       PSP_MMO_PARTY_LIST_HDR_LEN = 8 + 4 };
 
 /* MSG_S2C_SYSTEM_NOTICE: hdr, colour u32 (0xRRGGBB), text[128] (UTF-8, NUL-padded) */
 enum { PSP_MMO_NOTICE_TEXT_LEN = 128, PSP_MMO_NOTICE_LEN = 8 + 4 + PSP_MMO_NOTICE_TEXT_LEN };

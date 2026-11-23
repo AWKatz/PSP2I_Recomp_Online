@@ -91,6 +91,21 @@ static int established_count(void) {
     return n;
 }
 
+/* Our role in the game's party, for the server's party directory: a parent
+ * leads (members = itself + established children); a child is a member once
+ * its parent accepted it. */
+static void report_party(void) {
+    if (!M.used || !M.running) { mmo_party_report(0, 0, 0, 0, NULL); return; }
+    if (M.mode == MODE_PARENT) {
+        const int n = established_count() + 1;
+        mmo_party_report(1, n, M.maxnum, n < M.maxnum, NULL);
+        return;
+    }
+    for (int i = 0; i < MAX_PEERS; i++)
+        if (M.peers[i].state == P_ESTABLISHED) { mmo_party_report(2, 0, M.maxnum, 0, M.peers[i].mac); return; }
+    mmo_party_report(0, 0, 0, 0, NULL);
+}
+
 /* ---- sending ---- */
 
 static int send_msg(const uint8_t *to_mac, int type, const void *data, uint32_t len, int reliable) {
@@ -120,6 +135,7 @@ void mmo_matching_on_packet(const psp_net_packet *p) {
     switch (type) {
     case M_HELLO:
         if (M.mode != MODE_CHILD && M.mode != MODE_P2P) break;
+        if (!mmo_join_target_allows(mac)) break;               /* steered to another party */
         if (!pe) {
             pe = find_peer(mac, 1);
             if (pe) ev_queue(EV_HELLO, mac, opt, olen);
@@ -163,6 +179,7 @@ void mmo_matching_on_packet(const psp_net_packet *p) {
 /* ---- per frame: HELLO broadcasts, event delivery ---- */
 
 void mmo_matching_pump(void) {
+    if (mmo_net_ready()) report_party();                   /* sent only when it changes */
     if (M.used && M.running && (M.mode == MODE_PARENT || M.mode == MODE_P2P) && mmo_net_ready()) {
         const uint64_t now = psp_wall_us();
         if (now - M.last_hello >= (M.hello_us ? M.hello_us : 1000000u) && established_count() < M.maxnum - 1) {
@@ -184,6 +201,18 @@ void mmo_matching_pump(void) {
             psp_call_guest5(M.callback, (uint32_t)M.id, (uint32_t)e->ev, g_buf, e->len, e->len ? g_buf + 16 : 0);
         }
         free(e->data);
+    }
+}
+
+void mmo_matching_status(int *mode, int *running, int *established, int *target_seen) {
+    *mode = M.used ? M.mode : 0;
+    *running = M.used && M.running;
+    *established = M.used ? established_count() : 0;
+    *target_seen = 0;
+    uint8_t t[6];
+    if (M.used && psp_net_mmo_join_target(t)) {
+        const peer *pe = find_peer(t, 0);
+        *target_seen = pe && pe->state != P_NONE;
     }
 }
 

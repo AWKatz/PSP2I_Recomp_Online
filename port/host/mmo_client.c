@@ -7,12 +7,14 @@
  *   lan_discovery = true          # look for a server on the LAN when server_ip is unset
  *   discovery_port = 29000        # where LAN servers answer (psp2i_server --lan)
  *   player_name   = "Ann"         # sent in the handshake
+ *   party_finder  = true          # open the party finder at the Matching Counter (F2 any time)
  *
  * A missing file means those defaults. With no server_ip and LAN discovery
  * on, the first server to answer a broadcast probe (with the same version
  * hash) is used; if none answers, 127.0.0.1. */
 
 #include "mmo_client.h"
+#include "party_ui.h"
 
 #include <psprecomp/net.h>
 #include <psprecomp/net_enet.h>
@@ -40,6 +42,7 @@ void mmo_client_init(const char *base) {
     const int lan = toml_get_bool(&doc, "lan_discovery", 1);
     long long dport = toml_get_int(&doc, "discovery_port", PSP_MMO_LAN_PORT);
     const char *name = toml_get_str(&doc, "player_name", "PSP2i");
+    party_ui_init(toml_get_bool(&doc, "party_finder", 1));
     if (port < 1 || port > 65535) { psp_net_log("mmo: server_port %lld out of range, using %d", port, DEFAULT_PORT); port = DEFAULT_PORT; }
     char found[64];
     if (!*ip && lan) {
