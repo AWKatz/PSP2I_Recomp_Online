@@ -46,7 +46,39 @@ The move path, as logged on both clients during a lobby → mission → lobby tr
 | `warp2010000,0,2000,5` | lobby: a counter room with four boards |
 | `warp2010000,0,2300,0` | an empty void: the area index has no map for that zone; nothing crashed |
 
-More entry points (named in game, 2026-11-23): 9 Battle Shop, 11 Style Shop, 15 and 16 the Style Shop's Salon, 17 Little Wing (any entry above 17 also lands there); 6, 8, 10, 12, 13 and 14 are spots in the plaza by its doors and gates, 7 another spot on the Observation Deck. Entry 2 is the Cafe, 3 the Shop Plaza. Other social areas (the city, casino, beach and so on) need their quest table loaded first, which is the next research step (the request task at `0x0888B62C`).
+More entry points (named in game, 2026-11-23): 9 Battle Shop, 11 Style Shop, 15 and 16 the Style Shop's Salon, 17 Little Wing (any entry above 17 also lands there); 6, 8, 10, 12, 13 and 14 are spots in the plaza by its doors and gates, 7 another spot on the Observation Deck. Entry 2 is the Cafe, 3 the Shop Plaza. Social areas outside the lobby: see the next section.
+
+## Social areas outside the lobby: blocked (2026-11-23)
+
+**The candidates.** The quest file list in memory (`filelist.rel`: destination id → quest folder) names the social areas outside the lobby:
+
+| Folder | Destination id |
+| --- | --- |
+| `city2` | 2011000 |
+| `kaigan_map_0_0` (beach) | 2708900 |
+| `hakobune_map_0_0` (ark) | 2709000 |
+| `sidestory01`…`05` | 2301500, 2301600, 2301700, 2302000, 2302100 |
+| `tm_001`…`006` | 2900100…2900600 |
+| `robbie_off_0_0`…`0_2` | 2050000…2050002 |
+
+None of them is in any quest table (tables 0–7, 12, 100–106, 201–206, 301–306 were each requested and searched); they are single-player quests.
+
+**How Multi Mode moves.** Online, the move step (`0x0893DEA0`) does not move: it sends session message 0x0807 (destination, area index, zone, entry) to the leader's session server and waits. The server loads the destination's quest (quest data manager vfunc +0, `0x08D251D0`). 2010000 (the lobby) is built in (`city.rel`). Anything else is looked up in the server's `filelist.rel` (`0x08D25004`), then read from `QuestData/<folder>/chunk.nbl`, which must contain `quest.rel`.
+
+**Where it stops.**
+
+1. The server's `filelist.rel` has no entry for these quests, so the lookup returns nothing and the quest load fails (`0x08D25004` → 0). Supplying the folder name gets one step further.
+2. There is no `quest.rel` to be found. `chunk.nbl` (missions' format) is missing or doesn't have it; the single-player `XB/quest_j.nbl` doesn't have it either.
+3. Without the server, forcing the move step's offline path (`0x08ACFB3C` → 0) reloads the current area instead, with the players missing: the client can only reach destinations in the quest it has loaded (`city`).
+
+**What it would take.**
+
+- Teach the session server the single-player quest format: read `quest_j.nbl` and build the server-side quest from it.
+- Or change the clients' loaded quest from `city` to `city2` (as story mode does when it enters these areas) and keep the session server in its lobby state.
+
+Either is a larger reverse-engineering project than the lobby rooms.
+
+Tools used (taken out again, simple to restore): a `loadtable<N>` test command (`0x0888B594(table, -1, 0)`, the counter's quest-table request) and logging of the quest data manager's lookups.
 
 ## Weapons in the lobby (option 1): working
 
