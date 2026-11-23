@@ -597,8 +597,9 @@ GLSL_HEADER
 "uniform uvec4 dst; uniform uvec4 src; uniform uvec4 rng;\n"   /* off, stride, fmt, bpp; ...; lo, hi */
 "uniform sampler2D Y;\n"
 "out vec4 o_c;\n"
+"uvec2 g_sub;\n"                                                /* the sample inside a PSP pixel (render scale rng.z) */
 "uint ld(uint i) {\n"
-"  uvec4 b = uvec4(round(clamp(texelFetch(Y, ivec2(int(i % src.y), int(i / src.y)), 0), 0.0, 1.0) * 255.0));\n"
+"  uvec4 b = uvec4(round(clamp(texelFetch(Y, ivec2(int((i % src.y) * rng.z + g_sub.x), int((i / src.y) * rng.z + g_sub.y)), 0), 0.0, 1.0) * 255.0));\n"
 "  return b.x | (b.y << 8) | (b.z << 16) | (b.w << 24);\n"
 "}\n"
 "uint pack16(uint f, uint c) {\n"
@@ -618,7 +619,8 @@ GLSL_HEADER
 "}\n"
 "vec4 bytes4(uint w) { return vec4(float(w & 255u), float((w >> 8) & 255u), float((w >> 16) & 255u), float(w >> 24)) / 255.0; }\n"
 "void main() {\n"
-"  uint x = uint(gl_FragCoord.x), y = uint(gl_FragCoord.y);\n"
+"  g_sub = uvec2(gl_FragCoord.xy) % rng.z;\n"
+"  uint x = uint(gl_FragCoord.x) / rng.z, y = uint(gl_FragCoord.y) / rng.z;\n"
 "  uint A = dst.x + (y * dst.y + x) * dst.w;\n"
 "  if (A < rng.x || A + dst.w > rng.y) discard;\n"
 "  uint rel = A - src.x;\n"
@@ -633,6 +635,45 @@ GLSL_HEADER
 "}\n";
 
 /* ---- render targets ------------------------------------------------------------------ */
+
+/* Internal resolution: every render target and depth buffer is S times the
+ * PSP's size in each direction (S x 480x272 on screen). Targets keep their
+ * PSP size in w/h (what the game addresses); only the GL storage, viewport,
+ * scissor and blits are scaled. Where the CPU's copy of VRAM meets a target
+ * (rt_upload, readbacks, gl_ge_present) the pixels go through a 1x staging
+ * target: VRAM holds the PSP's resolution, as on the hardware. */
+static int g_rs = 1;
+void gl_ge_set_render_scale(int s) { g_rs = s < 1 ? 1 : s > 8 ? 8 : s; }
+int gl_ge_render_scale(void) { return g_rs; }
+
+static GLuint new_texture(uint32_t w, uint32_t h);
+static GLuint new_fbo(GLuint tex);
+static GLuint g_stage, g_stage_fbo;              /* 1x staging target (g_rs > 1) */
+static uint32_t g_stage_w, g_stage_h;
+static GLuint stage_fbo(uint32_t w, uint32_t h) {
+    if (!g_stage || g_stage_w < w || g_stage_h < h) {
+        if (g_stage_fbo) glDeleteFramebuffers(1, &g_stage_fbo);
+        if (g_stage) glDeleteTextures(1, &g_stage);
+        if (w < g_stage_w) w = g_stage_w;
+        if (h < g_stage_h) h = g_stage_h;
+        g_stage = new_texture(w, h);
+        g_stage_fbo = new_fbo(g_stage);
+        g_stage_w = w; g_stage_h = h;
+    }
+    return g_stage_fbo;
+}
+/* Rows y0..y1 of t at 1x, bound for reading: t itself at 1x, else downscaled
+ * into the staging target. */
+static void bind_read_1x(GLuint fbo, uint32_t w, uint32_t y0, uint32_t y1) {
+    if (g_rs == 1) { glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo); return; }
+    const GLuint sf = stage_fbo(w, 512);
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, sf);
+    glBlitFramebuffer(0, (GLint)(y0 * g_rs), (GLint)(w * g_rs), (GLint)(y1 * g_rs), 0, (GLint)y0, (GLint)w, (GLint)y1,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, sf);
+}
 
 static void rt_free(rt_entry *t) {
     if (t->fbo) glDeleteFramebuffers(1, &t->fbo);
@@ -662,7 +703,7 @@ static const uint32_t *read_rows(const rt_entry *t, uint32_t y0, uint32_t y1) {
         if (!p) return NULL;
         g_rb_buf = p; g_rb_cap = need;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, t->fbo);
+    bind_read_1x(t->fbo, t->w, y0, y1);
     glReadPixels(0, (GLint)y0, (GLsizei)t->w, (GLsizei)(y1 - y0), GL_RGBA, GL_UNSIGNED_BYTE, g_rb_buf);
     return g_rb_buf;
 }
@@ -716,8 +757,19 @@ static void rt_upload(rt_entry *t) {
             px[y * t->stride + x] = c;
         }
     }
-    glBindTexture(GL_TEXTURE_2D, t->tex);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, (GLsizei)t->stride, (GLsizei)t->rows, GL_RGBA, GL_UNSIGNED_BYTE, px);
+    if (g_rs == 1) {
+        glBindTexture(GL_TEXTURE_2D, t->tex);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, (GLsizei)t->stride, (GLsizei)t->rows, GL_RGBA, GL_UNSIGNED_BYTE, px);
+    } else {                                             /* at 1x into the staging target, then scaled up */
+        const GLuint sf = stage_fbo(t->stride, 512);
+        glBindTexture(GL_TEXTURE_2D, g_stage);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, (GLsizei)t->stride, (GLsizei)t->rows, GL_RGBA, GL_UNSIGNED_BYTE, px);
+        glDisable(GL_SCISSOR_TEST);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, sf);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, t->fbo);
+        glBlitFramebuffer(0, 0, (GLint)t->stride, (GLint)t->rows, 0, 0, (GLint)(t->stride * g_rs), (GLint)(t->rows * g_rs),
+                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    }
     free(px);
     uint32_t bytes = t->rows * t->stride * (uint32_t)bpp;
     if (t->off + bytes > VRAM_SIZE) bytes = VRAM_SIZE - t->off;
@@ -766,7 +818,7 @@ static rt_entry *rt_get(uint32_t off, uint32_t stride, int fmt, uint32_t rows) {
         }
         t->off = off; t->stride = stride; t->fmt = fmt;
         t->w = stride; t->h = 512;
-        t->tex = new_texture(t->w, t->h);
+        t->tex = new_texture(t->w * g_rs, t->h * g_rs);
         t->fbo = new_fbo(t->tex);
         if (!t->fbo) { if (t->tex) glDeleteTextures(1, &t->tex); memset(t, 0, sizeof *t); return NULL; }
         t->used = 1;
@@ -814,7 +866,7 @@ static depth_entry *depth_get(uint32_t off, uint32_t w, uint32_t h) {
         }
         glGenRenderbuffers(1, &d->rb);
         glBindRenderbuffer(GL_RENDERBUFFER, d->rb);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, (GLsizei)w, (GLsizei)h);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, (GLsizei)(w * g_rs), (GLsizei)(h * g_rs));
         d->off = off; d->w = w; d->h = h; d->used = 1; d->cleared = 0;
     }
     d->last_use = ++g_use;
@@ -1046,14 +1098,15 @@ static GLuint scratch_copy(const rt_entry *t) {
     if (!g_scratch || g_scratch_w != t->w || g_scratch_h != t->h) {
         if (g_scratch_fbo) glDeleteFramebuffers(1, &g_scratch_fbo);
         if (g_scratch) glDeleteTextures(1, &g_scratch);
-        g_scratch = new_texture(t->w, t->h);
+        g_scratch = new_texture(t->w * g_rs, t->h * g_rs);
         g_scratch_fbo = new_fbo(g_scratch);
         g_scratch_w = t->w; g_scratch_h = t->h;
     }
     glDisable(GL_SCISSOR_TEST);                           /* blits obey the scissor */
     glBindFramebuffer(GL_READ_FRAMEBUFFER, t->fbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, g_scratch_fbo);
-    glBlitFramebuffer(0, 0, (GLint)t->w, (GLint)t->h, 0, 0, (GLint)t->w, (GLint)t->h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    const GLint sw = (GLint)(t->w * g_rs), sh = (GLint)(t->h * g_rs);
+    glBlitFramebuffer(0, 0, sw, sh, 0, 0, sw, sh, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     return g_scratch;
 }
 
@@ -1136,9 +1189,9 @@ static void rt_xfer(rt_entry *t, rt_entry *o, uint32_t a, uint32_t b, int own) {
     uint32_t y0 = (i0 - t->off) / rt, y1 = (i1 - t->off + rt - 1) / rt;
     if (y1 > t->h) y1 = t->h;
     glBindFramebuffer(GL_FRAMEBUFFER, t->fbo);
-    glViewport(0, 0, (GLsizei)t->w, (GLsizei)t->h);
+    glViewport(0, 0, (GLsizei)(t->w * g_rs), (GLsizei)(t->h * g_rs));
     glEnable(GL_SCISSOR_TEST);
-    glScissor(0, (GLint)y0, (GLsizei)t->w, (GLsizei)(y1 - y0));
+    glScissor(0, (GLint)(y0 * g_rs), (GLsizei)(t->w * g_rs), (GLsizei)((y1 - y0) * g_rs));
     glDisable(GL_BLEND);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -1146,7 +1199,7 @@ static void rt_xfer(rt_entry *t, rt_entry *o, uint32_t a, uint32_t b, int own) {
     glUseProgram(g_xprog);
     glUniform4ui(u_xdst, t->off, t->stride, (GLuint)t->fmt, (GLuint)bpp_of(t->fmt));
     glUniform4ui(u_xsrc, o->off, o->stride, (GLuint)o->fmt, (GLuint)bpp_of(o->fmt));
-    glUniform4ui(u_xrng, i0, i1, 0, 0);
+    glUniform4ui(u_xrng, i0, i1, (GLuint)g_rs, 0);
     glActiveTexture(GL_TEXTURE0 + 1);
     glBindTexture(GL_TEXTURE_2D, o->tex);
     glBindSampler(1, 0);
@@ -1264,9 +1317,9 @@ static rt_entry *draw_target(const psp_gpu_state *st, depth_entry **dp, GLuint *
 static void draw_state(const psp_gpu_state *st, rt_entry *t, depth_entry *d, GLuint tex, const draw_prog *p,
                        const float uvs[2]) {
     bind_target(t, d);
-    glViewport(0, 0, (GLsizei)t->w, (GLsizei)t->h);
+    glViewport(0, 0, (GLsizei)(t->w * g_rs), (GLsizei)(t->h * g_rs));
     glEnable(GL_SCISSOR_TEST);
-    glScissor(st->sx0, st->sy0, st->sx1 - st->sx0 + 1, st->sy1 - st->sy0 + 1);
+    glScissor(st->sx0 * g_rs, st->sy0 * g_rs, (st->sx1 - st->sx0 + 1) * g_rs, (st->sy1 - st->sy0 + 1) * g_rs);
     int approx = 0;
     apply_blend(st, &approx);
     if (approx) n_approx++;
@@ -1292,6 +1345,26 @@ static void draw_rows(rt_entry *t, const psp_gpu_state *st, float ymin, float ym
     if (y0 < y1) rows_mark(t, (uint32_t)y0, (uint32_t)y1);
 }
 
+/* An upload into one of the streaming rings (a region is never rewritten
+ * before the ring wraps and orphans its storage).
+ *  - Desktop GL (NVIDIA, AMD, Intel): glBufferSubData. A map hands memory to
+ *    the caller, which makes a threaded driver (NVIDIA's default) wait for its
+ *    worker thread on every draw.
+ *  - GLES (Mali, Adreno) and macOS: an unsynchronised map. Those drivers treat
+ *    a sub-data upload into a buffer the GPU may still read as a hazard; on
+ *    macOS (GL over Metal) every glBufferSubData waited for a free command
+ *    buffer -- 70% of the game thread in the multiplayer lobby (6.6 fps). */
+#if defined(PSP2I_GLES) || defined(__APPLE__)
+#  define RING_MAP 1
+#endif
+static void ring_upload(GLenum target, GLintptr off, GLsizeiptr n, const void *src) {
+#ifdef RING_MAP
+    void *dst = glMapBufferRange(target, off, n, GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT | GL_MAP_INVALIDATE_RANGE_BIT);
+    if (dst) { memcpy(dst, src, (size_t)n); glUnmapBuffer(target); return; }
+#endif
+    glBufferSubData(target, off, n, src);
+}
+
 static void tl_flush(void);
 static int gl_draw(const psp_gpu_state *st, const psp_gpu_vertex *v, int nverts) {
     tl_flush();
@@ -1313,26 +1386,8 @@ static int gl_draw(const psp_gpu_state *st, const psp_gpu_vertex *v, int nverts)
         glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)VB_VERTS * (GLsizeiptr)sizeof(psp_gpu_vertex), NULL, GL_STREAM_DRAW);
         g_vb_pos = 0;
     }
-#ifdef PSP2I_GLES
-    /* Mobile drivers (Mali, Adreno) treat a sub-data upload into a buffer the
-     * GPU may still read as a hazard: they copy the whole buffer or wait. The
-     * ring never rewrites a region before the wrap orphans it, so an
-     * unsynchronised map is safe and costs only the copy. */
-    {
-        const GLsizeiptr n = (GLsizeiptr)nverts * (GLsizeiptr)sizeof(psp_gpu_vertex);
-        void *dst = glMapBufferRange(GL_ARRAY_BUFFER, (GLintptr)g_vb_pos * (GLintptr)sizeof(psp_gpu_vertex), n,
-                                     GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT | GL_MAP_INVALIDATE_RANGE_BIT);
-        if (dst) {
-            memcpy(dst, v, (size_t)n);
-            glUnmapBuffer(GL_ARRAY_BUFFER);
-        } else {
-            glBufferSubData(GL_ARRAY_BUFFER, (GLintptr)g_vb_pos * (GLintptr)sizeof(psp_gpu_vertex), n, v);
-        }
-    }
-#else
-    glBufferSubData(GL_ARRAY_BUFFER, (GLintptr)g_vb_pos * (GLintptr)sizeof(psp_gpu_vertex),
-                    (GLsizeiptr)nverts * (GLsizeiptr)sizeof(psp_gpu_vertex), v);
-#endif
+    ring_upload(GL_ARRAY_BUFFER, (GLintptr)g_vb_pos * (GLintptr)sizeof(psp_gpu_vertex),
+                (GLsizeiptr)nverts * (GLsizeiptr)sizeof(psp_gpu_vertex), v);
     first = (GLint)g_vb_pos;
     g_vb_pos += (uint32_t)nverts;
 
@@ -1392,7 +1447,7 @@ static void tl_flush(void) {
         glBufferData(GL_TEXTURE_BUFFER, (GLsizeiptr)g_tlvb_bytes, NULL, GL_STREAM_DRAW);
         g_tlvb_pos = 0;
     }
-    glBufferSubData(GL_TEXTURE_BUFFER, (GLintptr)g_tlvb_pos, (GLsizeiptr)vb, g_tlb_v);
+    ring_upload(GL_TEXTURE_BUFFER, (GLintptr)g_tlvb_pos, (GLsizeiptr)vb, g_tlb_v);
     const uint32_t vfirst = g_tlvb_pos;
     g_tlvb_pos += vb;
     glBindVertexArray(g_tlvao);                     /* holds the index buffer binding */
@@ -1400,7 +1455,7 @@ static void tl_flush(void) {
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)TLIB_BYTES, NULL, GL_STREAM_DRAW);
         g_tlib_pos = 0;
     }
-    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, (GLintptr)g_tlib_pos, (GLsizeiptr)ib, g_tlb_i);
+    ring_upload(GL_ELEMENT_ARRAY_BUFFER, (GLintptr)g_tlib_pos, (GLsizeiptr)ib, g_tlb_i);
     const uint32_t ifirst = g_tlib_pos;
     g_tlib_pos += ib;
 
@@ -1652,7 +1707,7 @@ int gl_ge_present(uint32_t addr, uint32_t stride, int fmt, uint32_t *out, int w,
         if (!g_pbo[k]) glGenBuffers(1, &g_pbo[k]);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pbo[k]);
         if (g_pbo_bytes[k] != bytes) { glBufferData(GL_PIXEL_PACK_BUFFER, (GLsizeiptr)bytes, NULL, GL_STREAM_READ); g_pbo_bytes[k] = bytes; }
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, t->fbo);
+        bind_read_1x(t->fbo, t->w, 0, (uint32_t)h);
         glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void *)0);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         fence_drop(k);
@@ -1837,7 +1892,7 @@ int gl_ge_present_direct(uint32_t addr, uint32_t stride, int fmt, int w, int h,
     if (!t || !t->dirty || t->w < (uint32_t)w || t->h < (uint32_t)h) return 0;
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, t->tex);
-    blit_draw((float)w / (float)t->w, (float)h / (float)t->h, (int)t->w, (int)t->h, w, x, y, vw, vh, cw, ch);
+    blit_draw((float)w / (float)t->w, (float)h / (float)t->h, (int)(t->w * g_rs), (int)(t->h * g_rs), w * g_rs, x, y, vw, vh, cw, ch);
     n_present_direct++;
     return 1;
 }

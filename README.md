@@ -34,7 +34,7 @@ To play on macOS or Linux, put these in the folder from the last column. Windows
 
 ```
 EBOOT.BIN                             the decrypted game executable
-psp2i.ini                             iso=game.iso  (path to your disc image; also fps=30|60)
+psp2i.ini                             settings: iso=game.iso (path to your disc image), fps=, resolution= (see below)
 GameData/flash/font/*.pgf             PSP firmware fonts (without them, menu text is missing)
 GameData/ms/PSP/SAVEDATA/NPJH50332/   your save: copy PPSSPP's memstick/PSP/SAVEDATA/NPJH50332 folder as is
 client_config.toml                    MMO builds only (see below)
@@ -44,6 +44,23 @@ TEXTURES/NPJH50332/textures.ini + PNGs  an HD texture pack made for PPSSPP (macO
 HD textures use PPSSPP's pack format and hashing, so PPSSPP packs work as they are: copy the whole `memstick/PSP/TEXTURES/NPJH50332` folder, including its `textures.ini`. Two environment variables help:
 - `PSP2I_TEXTURES=DIR` uses a pack from somewhere else.
 - `PSP2I_TEXDUMP=1` writes every texture the pack doesn't replace to `<pack>/new/` (as `<hash>.png`, listed in `new/textures.ini`), which is how packs are made.
+
+### Frame rate and resolution
+
+Both are set in `psp2i.ini`, a plain-text file in the same folder as your game files (the last column of the table above; on macOS, the repository root next to `Launch-PSP2i.command`). Edit it with any text editor while the game is closed:
+
+```
+iso=game.iso
+fps=60
+resolution=1920x1080
+```
+
+| Setting | Values | What it does |
+| --- | --- | --- |
+| `fps` | `30` (default), `60` | The game's frame rate. 60 runs the game's own timing at 60, as PPSSPP's 60 fps cheat does, so no cheat file is needed. Also in the in-game settings menu (FRAME RATE), which saves it back to `psp2i.ini`. |
+| `resolution` | `WIDTHxHEIGHT` (e.g. `1280x720`, `1920x1080`, `2560x1440`, `3840x2160`), or `native` | The window size and the internal rendering resolution: the nearest whole multiple of the PSP's 480x272, up to 8x (`1920x1080` renders at 4x, 1920x1088). `native` renders at 480x272. Without the line, the game renders at 480x272 in a 960x544 window. Read at startup only. |
+
+`resolution` applies to the macOS, Linux and Android builds; on Windows the window size is chosen in the settings menu (RESOLUTION, kept in `psp2i_display.ini`) and the game still renders at 480x272. HD textures only show their detail above `native`. The settings menu rewrites its own keys in `psp2i.ini` and keeps the others, including `resolution`.
 
 PPSSPP and PSP saves load and save encrypted, so they work in both directions. In-game, Cross confirms.
 

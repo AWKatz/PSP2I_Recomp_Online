@@ -650,6 +650,19 @@ static int pct_step(const char *s) {
     return v < 0 ? 0 : v > VOL_STEPS ? VOL_STEPS : v;
 }
 
+/* psp2i.ini resolution=WxH (e.g. 1920x1080) or native: the window's size and
+ * the internal resolution -- the nearest whole multiple of the PSP's 480x272
+ * (1920x1080 -> 4x, 1920x1088). */
+static int g_res_w, g_res_h, g_res_scale = 1;
+static void parse_resolution(const char *v) {
+    int w = 0, h = 0;
+    if (!strncmp(v, "native", 6)) { g_res_w = SCREEN_W * 2; g_res_h = SCREEN_H * 2; g_res_scale = 1; return; }
+    if (sscanf(v, "%dx%d", &w, &h) != 2 || w < SCREEN_W || h < SCREEN_H) { fprintf(stderr, "psp2i.ini: bad resolution=%s\n", v); return; }
+    const float sw = (float)w / SCREEN_W, sh = (float)h / SCREEN_H;
+    int sc = (int)((sw > sh ? sw : sh) + 0.5f);
+    g_res_w = w; g_res_h = h; g_res_scale = sc < 1 ? 1 : sc > 8 ? 8 : sc;
+}
+
 static int read_ini(int *fps) {
     char path[1100], line[1100];
     snprintf(path, sizeof path, "%s/psp2i.ini", g_base);
@@ -658,6 +671,7 @@ static int read_ini(int *fps) {
     while (fgets(line, sizeof line, f)) {
         line[strcspn(line, "\r\n")] = '\0';
         if (!strncmp(line, "fps=", 4)) *fps = atoi(line + 4) >= 60 ? 60 : 30;
+        else if (!strncmp(line, "resolution=", 11)) parse_resolution(line + 11);
         else if (!strncmp(line, "touch=", 6)) g_touch_on = strncmp(line + 6, "off", 3) != 0;
         else if (!strncmp(line, "fps_counter=", 12)) g_fps_on = strncmp(line + 12, "off", 3) != 0;
         else if (!strncmp(line, "swap_circle_cross=", 18)) g_swap_oc = !strncmp(line + 18, "on", 2);
@@ -905,11 +919,21 @@ int main(int argc, char **argv) {
 #else
     const SDL_WindowFlags wflags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
 #endif
-    g_win = SDL_CreateWindow("Phantasy Star Portable 2 Infinity Recompiled", SCREEN_W * 2, SCREEN_H * 2, wflags);
+    {   /* resolution= in psp2i.ini: in points, so a Retina display isn't doubled again */
+        int ww = SCREEN_W * 2, wh = SCREEN_H * 2;
+        if (g_res_w) {
+            ww = g_res_w; wh = g_res_h;
+            const SDL_DisplayMode *dm = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
+            if (dm && dm->pixel_density > 1.0f) { ww = (int)(ww / dm->pixel_density); wh = (int)(wh / dm->pixel_density); }
+        }
+        g_win = SDL_CreateWindow("Phantasy Star Portable 2 Infinity Recompiled", ww, wh, wflags);
+    }
     g_gl = g_win ? SDL_GL_CreateContext(g_win) : NULL;
     if (!g_gl) { fprintf(stderr, "psp2i: no OpenGL context: %s\n", SDL_GetError()); fail("This device has no OpenGL ES 3.0."); return 1; }
     SDL_GL_MakeCurrent(g_win, g_gl);
     SDL_GL_SetSwapInterval(0);                       /* the scheduler paces frames, not the swap */
+    gl_ge_set_render_scale(g_res_scale);
+    fprintf(stderr, "render: %dx internal resolution (%dx%d)\n", g_res_scale, SCREEN_W * g_res_scale, SCREEN_H * g_res_scale);
     if (gl_load(gl_get) != 0 || gl_ge_init() != 0) { fail("OpenGL ES 3.0 setup failed; see logs/psp2i_log.txt."); return 1; }
 
     char root[1100];

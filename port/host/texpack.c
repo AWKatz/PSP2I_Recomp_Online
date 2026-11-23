@@ -40,6 +40,7 @@ typedef struct {
     char    *file;                 /* relative to the pack; "" = explicitly ignored */
     uint8_t *img;                  /* RGBA, loaded on first use */
     int      w, ht, state;         /* state: 0 not loaded, 1 loaded, -1 failed */
+    int      tries;                /* failed loads so far */
 } entry;
 
 typedef struct { uint32_t addr, w, h, nw, nh; } hashrange;
@@ -55,7 +56,7 @@ static struct {
     reducerange *rr; int nrr;
     /* (ck, h) -> entry index, or -1 = nothing to replace; for [hashes] and lookups already made */
     uint64_t *mk_ck; uint32_t *mk_h; int *mv; int mcap, mn;
-    unsigned replaced, dumped;
+    unsigned replaced, dumped, seen, missed;   /* seen/missed: distinct textures the game drew */
     FILE *dump_ini;
 } P;
 
@@ -339,6 +340,10 @@ const uint8_t *texpack_lookup(const uint32_t *orig, int *w, int *h) {
             }
         }
         mput(ck, hash, idx < 0 ? -1 : idx);
+        P.seen++;
+        if (idx < 0) P.missed++;
+        if (P.seen % 256 == 0)                            /* is the pack matching? */
+            fprintf(stderr, "texpack: %u textures seen, %u in the pack, %u not\n", P.seen, P.seen - P.missed, P.missed);
     }
     if (idx < 0) return NULL;
     entry *e = &P.e[idx];
@@ -348,9 +353,16 @@ const uint8_t *texpack_lookup(const uint32_t *orig, int *w, int *h) {
         snprintf(path, sizeof path, "%s/%s", P.dir, e->file);
         int n;
         e->img = stbi_load(path, &e->w, &e->ht, &n, 4);
-        e->state = e->img ? 1 : -1;
-        if (e->img) P.replaced++;
-        else fprintf(stderr, "texpack: cannot load %s (%s)\n", path, stbi_failure_reason());
+        if (e->img) {
+            e->state = 1;
+            if (P.replaced++ < 8) fprintf(stderr, "texpack: replaced %016llx%08x with %s (%dx%d)\n",
+                                          (unsigned long long)ck, hash, e->file, e->w, e->ht);
+        } else if (++e->tries < 3) {
+            /* not yet: a pack on a network share can fail to open now and then; tried again next time */
+        } else {
+            e->state = -1;
+            fprintf(stderr, "texpack: cannot load %s (%s)\n", path, stbi_failure_reason() ? stbi_failure_reason() : "cannot open");
+        }
     }
     if (e->state != 1) return NULL;
     *w = e->w;

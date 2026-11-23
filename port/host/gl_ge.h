@@ -8,6 +8,9 @@
 
 /* Install the backend (psp_gpu_set_backend). 0 on success. */
 int  gl_ge_init(void);
+/* Internal resolution: S x the PSP's 480x272 (1..8). Before the first frame. */
+void gl_ge_set_render_scale(int s);
+int  gl_ge_render_scale(void);
 /* As d3d11_present: 1 = `out` holds the displayed frame from an asynchronous
  * copy, 2 = keep the last picture, 0 = read VRAM (it is current). */
 int  gl_ge_present(uint32_t addr, uint32_t stride, int fmt, uint32_t *out, int w, int h);

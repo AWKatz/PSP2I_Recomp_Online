@@ -121,3 +121,6 @@ psp2i.flatpak
 
 # runtime logs and RAM snapshots (copies of game memory): never committed
 logs/
+
+# HD texture packs (third-party; PPSSPP format, TEXTURES/<game id>/)
+TEXTURES/
