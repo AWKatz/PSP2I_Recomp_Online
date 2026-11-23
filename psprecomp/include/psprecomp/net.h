@@ -106,6 +106,12 @@ int  psp_net_mmo_parties(psp_net_mmo_party *out, int max, int *players, unsigned
 /* Steering: with a target, the game's Join Party search only sees that
  * leader's party (other leaders' HELLOs are dropped). NULL = see every party. */
 void psp_net_mmo_set_join_target(const uint8_t mac[6]);
+/* Party warps: a leader sends one (the server passes it to the leader and its
+ * members); every client takes the one it receives with psp_net_mmo_take_warp
+ * (1 = a warp arrived; once each). */
+typedef struct { int32_t dest; int16_t area_index, zone, entry; } psp_net_mmo_warp;
+void psp_net_mmo_party_warp(const psp_net_mmo_warp *w);
+int  psp_net_mmo_take_warp(psp_net_mmo_warp *out);
 int  psp_net_mmo_join_target(uint8_t mac[6]);      /* 1 when one is set */
 /* This client's role in the game's party (PSP_MMO_PARTY_*: 0 none, 1 leader, 2 member). */
 int  psp_net_mmo_party_role(void);

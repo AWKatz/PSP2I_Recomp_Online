@@ -28,6 +28,8 @@ enum {
     MSG_C2S_PARTY_STATE   = 0x0030,   /* my party role (Multi Mode), whenever it changes */
     MSG_C2S_PARTY_LIST_REQ = 0x0031,  /* send me the party directory */
     MSG_S2C_PARTY_LIST    = 0x8030,   /* the party directory: every party a leader is hosting */
+    MSG_C2S_PARTY_WARP    = 0x0032,   /* a leader: take my party to this area */
+    MSG_S2C_PARTY_WARP    = 0x8032,   /* to the leader and every member: move to this area */
 };
 
 /* The party directory (Multi Mode). A client reports its role in the game's
@@ -44,6 +46,12 @@ enum { PSP_MMO_PARTY_LIST_REQ_LEN = 8 };
  * leader mac[6], members u8, max u8, open u8, pad u8, leader name[32] */
 enum { PSP_MMO_PARTY_ENTRY_LEN = 6 + 4 + 32, PSP_MMO_PARTY_LIST_MAX = 32,
        PSP_MMO_PARTY_LIST_HDR_LEN = 8 + 4 };
+
+/* MSG_C2S_PARTY_WARP / MSG_S2C_PARTY_WARP: hdr, destination i32 (quest table
+ * * 1000 + entry), area index i16, zone i16, entry i16, pad u16. The server
+ * takes it from a party leader only and sends it to the leader and every
+ * session whose reported leader is that leader. */
+enum { PSP_MMO_PARTY_WARP_LEN = 8 + 12 };
 
 /* MSG_S2C_SYSTEM_NOTICE: hdr, colour u32 (0xRRGGBB), text[128] (UTF-8, NUL-padded) */
 enum { PSP_MMO_NOTICE_TEXT_LEN = 128, PSP_MMO_NOTICE_LEN = 8 + 4 + PSP_MMO_NOTICE_TEXT_LEN };

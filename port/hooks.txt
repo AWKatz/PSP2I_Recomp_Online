@@ -54,3 +54,7 @@
 0x08AC1BD8   # a slot object called through its table: a stale one is passed over, not called (host/framerate.c)
 0x08D57B48   # package loader: one file's resource (names for model extraction, host/modelx.c)
 0x08D59624   # model resource setup: LOAD MODELS replaces the object at +0x10 (host/modelx.c)
+0x089F9B00   # area manager, per frame (runs the request at +68): party warps are requested from here, on the game thread (host/lobby.c)
+0x089F98AC   # area record: town? (area category 2): "no" in the Multi Mode lobby with WEAPONS IN THE LOBBY, except for the scene loader (host/lobby.c)
+0x089F98E4   # area record: special town? (category 2 + zone ranges): as above (host/lobby.c)
+0x0886C4DC   # session server: "no field object" (obj+36 == 0): holds back an equipment change's announcement in a lobby; passed with WEAPONS IN THE LOBBY (host/lobby.c)

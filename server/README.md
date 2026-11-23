@@ -81,7 +81,7 @@ With `lan_discovery = true` and no `server_ip` in `client_config.toml`, an MMO-b
 
 ## Tests
 
-- `cmake --build server/build --target test_server && server/build/test_server` runs the server on its own thread against real ENet clients. It covers the handshake checks, LAN discovery, relay gating, the party directory, and the timeout, protocol, rate-limit and shutdown disconnects.
+- `cmake --build server/build --target test_server && server/build/test_server` runs the server on its own thread against real ENet clients. It covers the handshake checks, LAN discovery, relay gating, the party directory and party warps, and the timeout, protocol, rate-limit and shutdown disconnects.
 - `test_db` (POSIX only) checks the crypto and the database. A child process runs a trade or a claim and is SIGKILLed partway through, at every crash point and in 300 random rounds. The test then reopens the database and checks that every item exists exactly once, total Meseta is unchanged, and `integrity_check` passes.
 - `test_admin` covers the panel and its API end to end: the page, logins and throttling, rates set through the API changing a real client's drops, a ban disconnecting a client within 1 s and refusing it on reconnect, announcements, events, the drop-table editor, the audit log, RCON, the event stream and the console.
 - `python3 server/tools/lan_probe.py [--expect-name NAME] [--expect-players N]` broadcasts a probe and checks the replies against a running server.

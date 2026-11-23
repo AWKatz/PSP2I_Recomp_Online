@@ -14,6 +14,7 @@
  * hash) is used; if none answers, 127.0.0.1. */
 
 #include "mmo_client.h"
+#include "lobby.h"
 #include "party_ui.h"
 
 #include <psprecomp/net.h>
@@ -43,6 +44,7 @@ void mmo_client_init(const char *base) {
     long long dport = toml_get_int(&doc, "discovery_port", PSP_MMO_LAN_PORT);
     const char *name = toml_get_str(&doc, "player_name", "PSP2i");
     party_ui_init(toml_get_bool(&doc, "party_finder", 1));
+    lobby_init();
     if (port < 1 || port > 65535) { psp_net_log("mmo: server_port %lld out of range, using %d", port, DEFAULT_PORT); port = DEFAULT_PORT; }
     char found[64];
     if (!*ip && lan) {

@@ -10,9 +10,9 @@
 
 </p>
 
-A recompilation project for **Phantasy Star Portable 2 Infinity (PSP2i)**, bringing the game to a native PC environment while preserving the original game's functionality and feel.
+A fork of the recompilation project for **Phantasy Star Portable 2 Infinity (PSP2i)**, bringing the game PC/macOS/Linux environments while preserving the original game's functionality and feel.
 
-**This fork (PSP2I_Recomp_Online)** adds online play: an MMO-capable client build and a self-contained dedicated 32player server with a web admin panel. The single-player build is unchanged unless you build with `-DENABLE_MMO_NET=ON` (client) or `-DBUILD_DEDICATED_SERVER=ON` (server).
+**This fork (PSP2I_Recomp_Online)** adds online play: an MMO-capable client build with the ability to warp to other lobby zones similar to PSO/PSU, lets you show off your characters weapons and gear in the lobby and supports dedicated 32 players per server with an easy to use web admin panel. The single-player build is unchanged unless you build with `-DENABLE_MMO_NET=ON` (client) or `-DBUILD_DEDICATED_SERVER=ON` (server).
 
 ## Quick Start
 
@@ -81,7 +81,7 @@ The keyboard uses PPSSPP's default layout. Click the game window first. A gamepa
 | Start | Space | Start / Menu |
 | Select | V (or Enter) | Back / View |
 | Settings menu | F1 | R3 or Guide |
-| Party finder (MMO builds) | F2 | L3 (left stick click) |
+| Party finder / lobby menu (MMO builds) | F2 | L3 (left stick click) |
 
 This is the Japanese release, so Circle confirms and Cross cancels. On Windows the keys can be rebound in the settings menu (CONTROLS > KEYBOARD/MOUSE).
 
@@ -182,7 +182,12 @@ Config files:
 
 If a step doesn't happen in time, the finder hands control back with a notice.
 
-**Test switches (any SDL build).** `PSP2I_TEST_INPUT=1` makes the client read button presses from `<data>/logs/input.cmd` (`start`, `circle`, `cross`, `up`, `down`, …, `wait500`, `f2`, and `shot`, which saves the window's picture to `logs/shot_<n>.png`), so test scripts can drive several clients at once without window focus. `PSP2I_NETTRACE=1` logs every ad hoc socket call; `PSP2I_RAMDUMP=1` makes F7 save the game's memory to `logs/`.
+**Lobby menu (MMO builds).** In the Multi Mode lobby, F2 / L3 opens the lobby menu instead (same keys as the party finder):
+
+- **Warp the party to**: Central Plaza, Shop Plaza, Bridge (mission terminal), Counter Room, Cafe or Observation Deck. Only the party leader can choose; the server passes the choice to every member and the whole party moves together.
+- **Weapons in the lobby** (off by default): show off your gear. With it on, the lobby gets the weapon palette (hold Cross / Z and pick a weapon set as in a mission), and everyone in the party sees the weapons you draw. It takes effect from the next time you enter the lobby (for example after a mission). Attacks do nothing there: the lobby has no enemies.
+
+**Test switches (any SDL build).** `PSP2I_TEST_INPUT=1` makes the client read button presses from `<data>/logs/input.cmd` (`start`, `circle`, `cross`, `up`, `down`, …, `wait500`, `f2`, `shot`, which saves the window's picture to `logs/shot_<n>.png`, `stick<u|d|l|r><ms>`, `hold<button>` / `release`, `watch<hex address>`, `dump`, `warp<dest>,<area index>,<zone>,<entry>` and `lobbyweapons<0|1>`), so test scripts can drive several clients at once without window focus. `PSP2I_NETTRACE=1` logs every ad hoc socket call; `PSP2I_RAMDUMP=1` makes F7 save the game's memory to `logs/`.
 
 More detail: [server/README.md](server/README.md), [port/linux/README.md](port/linux/README.md), [port/macos/README.md](port/macos/README.md).
 
@@ -193,6 +198,7 @@ More detail: [server/README.md](server/README.md), [port/linux/README.md](port/l
 | 1. Client networking: isolated network layer, ENet transport, MMO client entry | done |
 | 2. Dedicated server: headless server, SQLite persistence, server-side loot, web admin | done |
 | 3. Break the 4-player limits | in progress: limits mapped and checked in a live party ([docs/player_limit_offsets.md](docs/player_limit_offsets.md)); party finder |
+| 4. Mixed frame rates and the lobby | in progress: 30 / 60 fps players play together ([docs/mixed_framerate_results.md](docs/mixed_framerate_results.md)); lobby warps and weapons in the lobby ([docs/area_research.md](docs/area_research.md)) |
 
 Details are in [docs/net_hle_audit.md](docs/net_hle_audit.md) and [server/README.md](server/README.md). Saved for later: [Internet Multi Mode](docs/future_internet_multi_mode.md).
 

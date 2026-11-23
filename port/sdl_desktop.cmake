@@ -27,6 +27,10 @@ add_executable(psp2i ${PORT}/host/sdl_main.c ${PORT}/host/gl_ge.c ${PORT}/host/p
     ${PORT}/host/framerate.c ${PORT}/host/menu.c ${PORT}/host/texpack.c ${GEN_PARTS} ${PSP2I_GEN_DIR}/recomp_imports.c)
 target_include_directories(psp2i PRIVATE ${PORT}/host ${PSP2I_GEN_DIR} ${SPLIT_DIR}
     ${PORT}/third_party/xxhash ${PORT}/third_party/stb)
+option(PSP2I_TRACE "Build the generated code with function-entry tracing (area traces: PSP2I_TRACE_AREAS=1)" OFF)
+if(PSP2I_TRACE)
+    target_compile_definitions(psp2i PRIVATE PSPRECOMP_TRACE)
+endif()
 include(${PORT}/savecrypt.cmake)
 target_link_libraries(psp2i PRIVATE psprecomp psp2i_savecrypt SDL3::SDL3)
 
@@ -41,7 +45,7 @@ if(TARGET psp2i_atrac)
 endif()
 
 if(ENABLE_MMO_NET)   # psprecomp's option: the MMO client start-up
-    target_sources(psp2i PRIVATE ${PORT}/host/mmo_client.c ${PORT}/host/party_ui.c)
+    target_sources(psp2i PRIVATE ${PORT}/host/mmo_client.c ${PORT}/host/party_ui.c ${PORT}/host/lobby.c)
 endif()
 
 option(PSP2I_LIBAV "Decode movie video with FFmpeg" ON)

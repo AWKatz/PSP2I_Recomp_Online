@@ -1,6 +1,8 @@
 /* The party finder: see party_ui.h. Counted in vblanks (about 60 a second). */
 #include "party_ui.h"
 
+#include "lobby.h"
+
 #include <psprecomp/net.h>
 #include <psprecomp/net_proto.h>
 
@@ -12,7 +14,18 @@
 
 #define SEC(s) ((int)((s) * 60))
 
-enum { ST_HIDDEN, ST_LIST };
+enum { ST_HIDDEN, ST_LIST, ST_LOBBY };
+
+/* The lobby menu: warps to the Multi Mode lobby's rooms (destination 2010000,
+ * area index 0, zone 2000, by entry point; docs/area_research.md), then the
+ * options. */
+static const struct { const char *name; int entry; } ROOMS[] = {
+    { "Central Plaza", 4 }, { "Shop Plaza", 3 }, { "Bridge (mission terminal)", 0 }, { "Counter Room", 5 },
+    { "Cafe", 2 }, { "Observation Deck", 1 },
+};
+#define NROOMS ((int)(sizeof ROOMS / sizeof ROOMS[0]))
+#define LOBBY_DEST 2010000
+#define LOBBY_ZONE 2000
 enum { A_NONE, A_FORM, A_JOIN };
 /* automation steps */
 enum { S_SETTLE, S_PRESS_JOIN, S_WAIT_MATCHING, S_WAIT_TARGET, S_PICK, S_CONFIRM, S_WAIT_DONE };
@@ -37,14 +50,19 @@ static struct {
     /* a notice at the top of the picture */
     char notice[96];
     int notice_left;
+    int weapons;                 /* the lobby menu's "weapons in the lobby" option */
 } U;
+
+static int in_lobby(void) { return lobby_here(); }
+int party_ui_weapons(void) { return U.weapons; }
+void party_ui_set_weapons(int on) { U.weapons = on ? 1 : 0; }
 
 void party_ui_init(int auto_open) {
     memset(&U, 0, sizeof U);
     U.auto_open = auto_open;
 }
 
-int party_ui_open(void) { return U.state == ST_LIST; }
+int party_ui_open(void) { return U.state != ST_HIDDEN; }
 
 static void notice(const char *s, int secs) {
     snprintf(U.notice, sizeof U.notice, "%s", s);
@@ -63,6 +81,32 @@ static int pressing(void) { return U.press_left > 0 || U.gap_left > 0; }
 static int nrows(void) { return U.nparties + 2; }
 static int row_start(void) { return U.nparties; }
 static int row_close(void) { return U.nparties + 1; }
+
+static int lobby_rows(void) { return NROOMS + 2; }
+
+static void open_lobby(void) {
+    U.state = ST_LOBBY;
+    U.sel = 0;
+}
+
+static void choose_lobby(int row, int role) {
+    if (row < NROOMS) {
+        if (role != PSP_MMO_PARTY_LEADER) { notice("Only the party leader can warp the party.", 4); return; }
+        const psp_net_mmo_warp w = { LOBBY_DEST, 0, LOBBY_ZONE, (int16_t)ROOMS[row].entry };
+        psp_net_mmo_party_warp(&w);
+        char m[96];
+        snprintf(m, sizeof m, "Warping the party to the %s...", ROOMS[row].name);
+        notice(m, 4);
+        U.state = ST_HIDDEN;
+        return;
+    }
+    if (row == NROOMS) {
+        U.weapons = !U.weapons;
+        notice(U.weapons ? "Weapons in the lobby: on (the palette appears from the next lobby entry)" : "Weapons in the lobby: off", 4);
+        return;
+    }
+    U.state = ST_HIDDEN;
+}
 
 static void open_panel(void) {
     U.state = ST_LIST;
@@ -174,11 +218,21 @@ int party_ui_update(uint32_t held, uint32_t latched, uint32_t *inject) {
     const uint32_t pressed = (held & ~U.prev_held) | latched;
     U.prev_held = held;
     if (pressed & MI_TOGGLE) {
-        if (U.state == ST_LIST) U.state = ST_HIDDEN;
+        if (U.state != ST_HIDDEN) U.state = ST_HIDDEN;
         else if (U.act != A_NONE) stop_auto("Party finder stopped.");
+        else if (in_lobby()) open_lobby();
         else if (!st.adhocctl) notice("The party finder opens in Multi Mode (Matching Counter).", 4);
-        else if (role != PSP_MMO_PARTY_NONE) notice("You are already in a party.", 4);
+        else if (role != PSP_MMO_PARTY_NONE) notice("You are already in a party: F2 / L3 in the lobby for its menu.", 4);
         else open_panel();
+    }
+
+    if (U.state == ST_LOBBY) {
+        if (!in_lobby()) U.state = ST_HIDDEN;
+        const int n = lobby_rows();
+        if (pressed & MI_UP) U.sel = (U.sel + n - 1) % n;
+        if (pressed & MI_DOWN) U.sel = (U.sel + 1) % n;
+        if (pressed & MI_BACK) U.state = ST_HIDDEN;
+        else if (pressed & MI_CONFIRM) choose_lobby(U.sel, role);
     }
 
     if (U.state == ST_LIST) {
@@ -208,7 +262,7 @@ int party_ui_update(uint32_t held, uint32_t latched, uint32_t *inject) {
     auto_step(&st);
     if (U.press_left > 0) { *inject = U.press_btn; U.press_left--; }
     else if (U.gap_left > 0) U.gap_left--;
-    return U.state == ST_LIST;
+    return U.state != ST_HIDDEN;
 }
 
 /* ---- drawing ---------------------------------------------------------------------- */
@@ -257,6 +311,27 @@ int party_ui_draw(menu_image *img, int *bx, int *by, int *bw, int *bh) {
             menu_text(img, x + 12, ly, line, col);
         }
         menu_text(img, x + 10, y + h - 12, "Circle: choose   Cross: close   F2 / L3: finder", GREY);
+        *bx = x; *by = y; *bw = w; *bh = h;
+        return 1;
+    }
+    if (U.state == ST_LOBBY) {
+        const int rows = lobby_rows();
+        const int w = 300, h = 44 + rows * 12 + 22, x = (W_ - w) / 2, y = (H_ - h) / 2;
+        const int leader = psp_net_mmo_party_role() == PSP_MMO_PARTY_LEADER;
+        frame_box(img, x, y, w, h);
+        menu_text(img, x + 10, y + 8, "LOBBY", CYAN);
+        menu_text(img, x + 10, y + 22, leader ? "Warp the party to:" : "Warp (party leader only):", GREY);
+        char line[96];
+        for (int i = 0; i < rows; i++) {
+            const int ly = y + 38 + i * 12 + (i >= NROOMS ? 6 : 0);
+            uint32_t col = i < NROOMS && !leader ? GREY : WHITE;
+            if (i < NROOMS) snprintf(line, sizeof line, "%s", ROOMS[i].name);
+            else if (i == NROOMS) snprintf(line, sizeof line, "Weapons in the lobby: %s", U.weapons ? "ON" : "OFF");
+            else snprintf(line, sizeof line, "Close");
+            if (i == U.sel) { fill(img, x + 6, ly - 2, w - 12, 11, 0xFF304878); if (col == WHITE) col = YELLOW; }
+            menu_text(img, x + 12, ly, line, col);
+        }
+        menu_text(img, x + 10, y + h - 12, "Circle: choose   Cross: close   F2 / L3: menu", GREY);
         *bx = x; *by = y; *bw = w; *bh = h;
         return 1;
     }

@@ -375,6 +375,25 @@ static void on_party_list_req(srv *s, session *ss) {
                    (uint32_t)(PSP_MMO_PARTY_LIST_HDR_LEN + n * PSP_MMO_PARTY_ENTRY_LEN));
 }
 
+/* A party leader's warp: to the leader and its members (as they report it). */
+static void on_party_warp(srv *s, session *ss, const psp_net_packet *p) {
+    if (p->len != PSP_MMO_PARTY_WARP_LEN || ss->party_role != PSP_MMO_PARTY_LEADER) return;
+    uint8_t m[PSP_MMO_PARTY_WARP_LEN];
+    memcpy(m, p->data, sizeof m);
+    psp_mmo_put_hdr(m, MSG_S2C_PARTY_WARP);
+    const psp_net_transport *t = psp_net_enet_transport(s->enet);
+    int n = 0;
+    for (int i = 0; i < MAX_SESSIONS; i++) {
+        const session *o = &s->sess[i];
+        if (o->state != SS_ACTIVE || o->party_role == PSP_MMO_PARTY_NONE || memcmp(o->party_leader, ss->mac, 6)) continue;
+        const psp_net_peer to = { { 0 }, o->id };
+        t->send_packet(t->ctx, &to, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, m, sizeof m);
+        n++;
+    }
+    s->st.party_warps++;
+    slog(s, "party: '%s' warps the party (%d players) to destination %d", ss->name, n, (int)psp_mmo_get_u32(m + 8));
+}
+
 static void on_packet(const psp_net_packet *p, void *u) {
     srv *s = u;
     session *ss = find(s, p->from.id);
@@ -393,6 +412,7 @@ static void on_packet(const psp_net_packet *p, void *u) {
     if (type == MSG_C2S_ENEMY_KILLED) on_kill(s, ss, p);
     else if (type == MSG_C2S_PARTY_STATE) on_party_state(s, ss, p);
     else if (type == MSG_C2S_PARTY_LIST_REQ) on_party_list_req(s, ss);
+    else if (type == MSG_C2S_PARTY_WARP) on_party_warp(s, ss, p);
 }
 
 /* ---- lifecycle ---------------------------------------------------------------------- */

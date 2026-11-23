@@ -9,6 +9,8 @@ int  mmo_net_ready(void);                         /* joined the server: the tran
 /* The party directory (adhoc_mmo.c): our role in the game's party, sent to
  * the server when it changes; the join target (steering). */
 void mmo_party_report(int role, int members, int max, int open, const uint8_t leader_mac[6]);
+/* Matching stopped: keep the party role (closed) while ad hoc control is up. */
+void mmo_party_keep(void);
 int  mmo_join_target_allows(const uint8_t mac[6]);   /* a HELLO from this leader may reach the game */
 
 /* sceNetAdhocMatching (adhoc_matching.c) */

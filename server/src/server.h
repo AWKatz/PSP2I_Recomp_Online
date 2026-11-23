@@ -43,6 +43,7 @@ typedef struct {
     uint64_t packets_in, packets_dropped;
     uint64_t lan_replies;
     uint64_t kills, kills_dropped, drops, rare_drops, reloads, reload_errors;
+    uint64_t party_warps;                /* MSG_C2S_PARTY_WARP relayed */
 } srv_stats;
 
 typedef struct srv srv;

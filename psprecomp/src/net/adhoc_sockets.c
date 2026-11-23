@@ -20,6 +20,7 @@
 #include "psprecomp/net_transport.h"
 
 #include <stdlib.h>
+#include <psprecomp/cpu.h>
 #include <string.h>
 
 #define E_INVALID_SOCKET  0x80410701u
@@ -384,6 +385,31 @@ static void hle_PtpSend(void) {
     uint32_t len = lenp ? psp_read32(lenp) : 0, sent = 0;
     if (trace_on()) psp_net_log("trace: PtpSend(%u) len %u (state %d, peer_closed %d)", psp_arg(0), len, s->state, s->peer_closed);
     uint8_t chunk[CHUNK];
+    {   /* research (PSP2I_PKT_TRACE=<cmd><sub> hex, e.g. 0105): the game's stack
+         * when it sends a session message of that type */
+        static int want = -2;
+        if (want == -2) { const char *e = getenv("PSP2I_PKT_TRACE"); want = !e ? -1 : !strcmp(e, "all") ? 0x10000 : (int)strtol(e, NULL, 16); }
+        static uint8_t seen[0x10000];
+        if (want >= 0 && len >= 8 && len <= 4096) {
+            const uint32_t b = psp_arg(1);
+            for (uint32_t k = 0; k + 6 <= len;) {
+                const uint32_t ml = psp_read32(b + k);
+                const int type = (psp_read8(b + k + 4) << 8) | psp_read8(b + k + 5);
+                if (type == want || (want == 0x10000 && !seen[type])) {
+                    seen[type] = 1;
+                    char line[900];
+                    int o = snprintf(line, sizeof line, "pkt: send %04X (%u bytes) stack:", type, ml);
+                    for (uint32_t q = 0; q < 0x300 && o < (int)sizeof line - 12; q += 4) {
+                        const uint32_t w = psp_read32(psp_cpu.r[29] + q);
+                        if (w >= 0x08804000u && w < 0x08DF0000u && !(w & 3)) o += snprintf(line + o, sizeof line - o, " %08X", w);
+                    }
+                    psp_net_log("%s", line);
+                }
+                if (ml < 8 || ml > len - k) break;
+                k += ml;
+            }
+        }
+    }
     while (sent < len) {
         const uint32_t n = len - sent < CHUNK ? len - sent : CHUNK;
         psp_mem_read_block(chunk, psp_arg(1) + sent, n);

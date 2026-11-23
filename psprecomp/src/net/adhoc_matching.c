@@ -95,7 +95,9 @@ static int established_count(void) {
  * leads (members = itself + established children); a child is a member once
  * its parent accepted it. */
 static void report_party(void) {
-    if (!M.used || !M.running) { mmo_party_report(0, 0, 0, 0, NULL); return; }
+    /* matching stopped (the party has begun play): the party lives on in the
+     * game's session, so the role is kept, closed, until Multi Mode ends */
+    if (!M.used || !M.running) { mmo_party_keep(); return; }
     if (M.mode == MODE_PARENT) {
         const int n = established_count() + 1;
         mmo_party_report(1, n, M.maxnum, n < M.maxnum, NULL);

@@ -69,6 +69,8 @@ typedef struct {
     uint32_t last_exp, last_item, last_flags;
     int party_lists, party_players, party_count, party_members, party_max, party_open;
     char party_leader[33];
+    int warps;
+    int32_t warp_dest;
 } client;
 
 static void cl_rx(const psp_net_packet *p, void *u) {
@@ -94,6 +96,9 @@ static void cl_rx(const psp_net_packet *p, void *u) {
             c->party_members = e[6]; c->party_max = e[7]; c->party_open = e[8];
             memcpy(c->party_leader, e + 10, 32); c->party_leader[32] = 0;
         }
+    } else if (p->port == PSP_MMO_CTRL_PORT && psp_mmo_type(p->data, p->len) == MSG_S2C_PARTY_WARP && p->len == PSP_MMO_PARTY_WARP_LEN) {
+        c->warps++;
+        c->warp_dest = (int32_t)psp_mmo_get_u32(p->data + 8);
     } else if (p->port != PSP_MMO_CTRL_PORT) {
         c->game_rx++;
     }
@@ -147,6 +152,22 @@ static void cl_party(client *c, uint8_t role, uint8_t members, uint8_t max, uint
     uint8_t m[PSP_MMO_PARTY_STATE_LEN] = { 0 };
     psp_mmo_put_hdr(m, MSG_C2S_PARTY_STATE);
     m[8] = role; m[9] = members; m[10] = max; m[11] = open;
+    cl_ctrl(c, m, sizeof m);
+}
+static void cl_member_of(client *c, uint8_t leader_mac_last) {
+    uint8_t m[PSP_MMO_PARTY_STATE_LEN] = { 0 };
+    psp_mmo_put_hdr(m, MSG_C2S_PARTY_STATE);
+    m[8] = PSP_MMO_PARTY_MEMBER; m[10] = 4;
+    const uint8_t mac[6] = { 0x00, 0x50, 0x81, 0x00, 0x00, leader_mac_last };
+    memcpy(m + 12, mac, 6);
+    cl_ctrl(c, m, sizeof m);
+}
+static void cl_warp(client *c, int32_t dest, int16_t entry) {
+    uint8_t m[PSP_MMO_PARTY_WARP_LEN] = { 0 };
+    psp_mmo_put_hdr(m, MSG_C2S_PARTY_WARP);
+    psp_mmo_put_u32(m + 8, (uint32_t)dest);
+    psp_mmo_put_u16(m + 14, 2000);
+    psp_mmo_put_u16(m + 16, (uint16_t)entry);
     cl_ctrl(c, m, sizeof m);
 }
 static void cl_party_list(client *c) {
@@ -239,6 +260,16 @@ int main(void) {
     cl_pump(&a, 50);
     cl_party_list(&b);
     CHECK(b.party_count == 1 && b.party_members == 4 && b.party_open == 0);
+    /* party warps: the leader's reaches the leader and its members; a member's is ignored */
+    cl_member_of(&b, 0xA);
+    cl_pump(&b, 50);
+    cl_warp(&a, 2010000, 3);
+    for (int i = 0; i < 100 && (a.warps < 1 || b.warps < 1); i++) { cl_pump(&a, 5); cl_pump(&b, 5); }
+    CHECK(a.warps == 1 && b.warps == 1 && b.warp_dest == 2010000);
+    cl_warp(&b, 2010000, 4);
+    for (int i = 0; i < 30; i++) { cl_pump(&a, 5); cl_pump(&b, 5); }
+    CHECK(a.warps == 1 && b.warps == 1);
+    cl_party(&b, PSP_MMO_PARTY_NONE, 0, 0, 0);
     cl_party(&a, PSP_MMO_PARTY_NONE, 0, 0, 0);
     cl_pump(&a, 50);
     cl_party_list(&b);

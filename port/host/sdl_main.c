@@ -67,6 +67,7 @@
 #include "texpack.h"
 #ifdef PSPRECOMP_MMO_NET
 #include "mmo_client.h"
+#include "lobby.h"
 #include "party_ui.h"
 #endif
 
@@ -245,7 +246,7 @@ static int g_touch_shown = 1;            /* hidden while a controller is used */
 static uint32_t g_touch_bits;
 static float g_knob_x, g_knob_y;         /* -1..1 */
 static menu_state g_menu;                /* the settings menu */
-static struct { char q[256][12]; int head, n, hold, gap, wait; uint32_t btn; int f2, shot; } g_ti;   /* test input (test_input) */
+static struct { char q[256][24]; int head, n, hold, gap, wait; uint32_t btn; int f2, shot, stick, sx, sy; uint32_t held; } g_ti;   /* test input (test_input) */
 static uint32_t g_party_latched;         /* MI_TOGGLE from F2 (the party finder, MMO builds) */
 static uint32_t g_menu_latched;          /* MI_TOGGLE from Back / F1 / the MENU button since the last vblank */
 static int g_menu_fx;                    /* MFX_* from taps on the open menu */
@@ -638,13 +639,87 @@ static void present(void) {
  * <data>/logs/input.cmd, so a test script can drive several clients at once
  * without window focus. One command per line or word: start select circle
  * cross square triangle up down left right l r f2 (the party finder),
- * wait<ms> (e.g. wait500), shot (the window's picture to logs/shot_<n>.png). Each press is held 100 ms, then 200 ms released.
+ * wait<ms> (e.g. wait500), stick<u|d|l|r><ms> (the analog stick held over;
+ * sticku2000), dump (a RAM snapshot, as F7 with PSP2I_RAMDUMP),
+ * watch<hex addr> / unwatch (float triples to logs/watch.txt, 20 a second), shot (the window's picture to logs/shot_<n>.png). Each press is held 100 ms, then 200 ms released.
  * The file is taken (renamed, read, deleted) every 100 ms; a script appends
  * to it with `echo circle >> logs/input.cmd`. */
+static void ram_dump(void);
+/* watch: float triples sampled every 3 vblanks (20 a second) to logs/watch.txt,
+ * one line per sample: vblank, then x y z for each watched address */
+static struct { uint32_t a[8]; int n; unsigned long vb; FILE *f; } g_tw;
+static void test_watch(void) {
+    g_tw.vb++;
+    if (!g_tw.n || g_tw.vb % 3) return;
+    if (!g_tw.f) {
+        char path[1100];
+        snprintf(path, sizeof path, "%s/logs/watch.txt", g_base);
+        if (!(g_tw.f = fopen(path, "a"))) { g_tw.n = 0; return; }
+    }
+    fprintf(g_tw.f, "%lu", g_tw.vb);
+    for (int i = 0; i < g_tw.n; i++) {
+        float v[3] = { 0, 0, 0 };
+        psp_mem_read_block(v, g_tw.a[i], sizeof v);
+        fprintf(g_tw.f, "  %08x %.3f %.3f %.3f", g_tw.a[i], v[0], v[1], v[2]);
+    }
+    fputc('\n', g_tw.f);
+    fflush(g_tw.f);
+}
+/* The area manager (singleton at 0x08ED4DD0, 92 bytes): three (area type u32,
+ * zone id s16) pairs at +40, +48 and +56. Logged when any of them changes. */
+static void test_area(void) {
+    static uint32_t last[6] = { 1 };
+    const uint32_t m = psp_read32(0x08ED4DD0u);
+    uint32_t v[6] = { 0 };
+    if (m) for (int i = 0; i < 3; i++) { v[2 * i] = psp_read32(m + 40 + 8 * i); v[2 * i + 1] = (uint32_t)(int16_t)psp_read16(m + 44 + 8 * i); }
+    if (memcmp(v, last, sizeof v)) {
+        memcpy(last, v, sizeof v);
+        fprintf(stderr, "test area: vblank %lu  +40 (%u, %d)  +48 (%u, %d)  +56 (%u, %d)\n", g_tw.vb,
+                v[0], (int)v[1], v[2], (int)v[3], v[4], (int)v[5]);
+    }
+}
+/* Function traces (trace builds: -DPSP2I_TRACE=ON, PSP2I_TRACE_AREAS=1): the
+ * test commands tracestart / tracestop record every game function entered in
+ * between, with its count, to logs/trace_<n>.txt -- comparing two recordings
+ * (an action that works and one that does not) finds the code that differs. */
+#define AT_SLOTS (1u << 17)
+static struct { uint32_t addr, count; } *g_at;
+static int g_at_on = -1, g_at_n, g_at_rec;
+static void at_enter(uint32_t addr) {
+    if (!g_at_rec) return;
+    uint32_t i = (addr * 2654435761u) & (AT_SLOTS - 1);
+    while (g_at[i].addr && g_at[i].addr != addr) i = (i + 1) & (AT_SLOTS - 1);
+    g_at[i].addr = addr;
+    g_at[i].count++;
+}
+static void at_start(void) {
+    if (g_at_on < 0) {
+        g_at_on = getenv("PSP2I_TRACE_AREAS") != NULL;
+        if (g_at_on && !(g_at = calloc(AT_SLOTS, sizeof *g_at))) g_at_on = 0;
+        if (g_at_on) psp_trace_set_enter_hook(at_enter);
+    }
+    if (!g_at_on) return;
+    memset(g_at, 0, AT_SLOTS * sizeof *g_at);
+    g_at_rec = 1;
+}
+static void at_stop(void) {
+    if (!g_at_rec) return;
+    g_at_rec = 0;
+    char path[1200];
+    snprintf(path, sizeof path, "%s/logs/trace_%d.txt", g_base, g_at_n++);
+    FILE *f = fopen(path, "w");
+    if (!f) return;
+    for (uint32_t i = 0; i < AT_SLOTS; i++) if (g_at[i].addr) fprintf(f, "%08X %u\n", g_at[i].addr, g_at[i].count);
+    fclose(f);
+    fprintf(stderr, "trace written: %s\n", path);
+}
+
 static void test_input(uint32_t *buttons) {
     static int on = -1, tick;
     if (on < 0) on = getenv("PSP2I_TEST_INPUT") != NULL;
     if (!on) return;
+    test_watch();
+    test_area();
     if (++tick % 6 == 0) {
         char path[1100], taken[1110];
         snprintf(path, sizeof path, "%s/logs/input.cmd", g_base);
@@ -653,11 +728,12 @@ static void test_input(uint32_t *buttons) {
             FILE *f = fopen(taken, "r");
             char w[32];
             while (f && fscanf(f, "%31s", w) == 1)
-                if (g_ti.n < 256) { snprintf(g_ti.q[(g_ti.head + g_ti.n) % 256], 12, "%s", w); g_ti.n++; }
+                if (g_ti.n < 256) { snprintf(g_ti.q[(g_ti.head + g_ti.n) % 256], 24, "%s", w); g_ti.n++; }
             if (f) fclose(f);
             remove(taken);
         }
     }
+    *buttons |= g_ti.held;
     if (g_ti.hold > 0) { g_ti.hold--; *buttons |= g_ti.btn; return; }
     if (g_ti.gap > 0) { g_ti.gap--; return; }
     if (g_ti.wait > 0) { g_ti.wait--; return; }
@@ -671,6 +747,43 @@ static void test_input(uint32_t *buttons) {
     if (!strncmp(c, "wait", 4)) { g_ti.wait = atoi(c + 4) * 60 / 1000; return; }
     if (!strcmp(c, "f2")) { g_ti.f2 = 1; g_ti.gap = 12; return; }
     if (!strcmp(c, "shot")) { g_ti.shot = 1; return; }
+    if (!strcmp(c, "dump")) { ram_dump(); return; }
+    if (!strncmp(c, "watch", 5) && c[5]) {           /* watch<hex addr>: log the float triple there */
+        if (g_tw.n < 8) g_tw.a[g_tw.n++] = (uint32_t)strtoul(c + 5, NULL, 16);
+        return;
+    }
+    if (!strncmp(c, "poke", 4) && strchr(c, '=')) {  /* poke<hex addr>=<hex u32>: write a word */
+        const uint32_t a = (uint32_t)strtoul(c + 4, NULL, 16), v = (uint32_t)strtoul(strchr(c, '=') + 1, NULL, 16);
+        psp_write32(a, v);
+        fprintf(stderr, "test input: poke %08x = %08x\n", a, v);
+        return;
+    }
+#ifdef PSPRECOMP_MMO_NET
+    if (!strncmp(c, "warp", 4) && c[4]) {           /* warp<dest>,<area index>,<zone>,<entry>: this client only */
+        int d, i, z, e;
+        if (sscanf(c + 4, "%d,%d,%d,%d", &d, &i, &z, &e) == 4) lobby_warp(d, (int16_t)i, (int16_t)z, (int16_t)e);
+        return;
+    }
+#endif
+    if (!strncmp(c, "hold", 4) && c[4]) {
+        for (size_t i = 0; i < sizeof B / sizeof B[0]; i++) if (!strcmp(c + 4, B[i].name)) g_ti.held |= B[i].bit;
+        return;
+    }
+    if (!strcmp(c, "release")) { g_ti.held = 0; return; }
+    if (!strcmp(c, "tracestart")) { at_start(); return; }
+    if (!strcmp(c, "tracestop")) { at_stop(); return; }
+#ifdef PSPRECOMP_MMO_NET
+    if (!strncmp(c, "lobbyweapons", 12)) { party_ui_set_weapons(atoi(c + 12) != 0); return; }
+#endif
+    if (!strcmp(c, "unwatch")) { g_tw.n = 0; if (g_tw.f) { fclose(g_tw.f); g_tw.f = NULL; } return; }
+    if (!strncmp(c, "stick", 5) && c[5]) {           /* stick<u|d|l|r><ms>: the analog stick held fully over */
+        const char d = c[5];
+        g_ti.sx = d == 'l' ? 0 : d == 'r' ? 255 : 128;
+        g_ti.sy = d == 'u' ? 0 : d == 'd' ? 255 : 128;
+        g_ti.stick = atoi(c + 6) * 60 / 1000;
+        g_ti.wait = g_ti.stick;                          /* the next command waits for it */
+        return;
+    }
     for (size_t i = 0; i < sizeof B / sizeof B[0]; i++)
         if (!strcmp(c, B[i].name)) { g_ti.btn = B[i].bit; g_ti.hold = 6; g_ti.gap = 12; *buttons |= g_ti.btn; fprintf(stderr, "test input: %s\n", c); return; }
     fprintf(stderr, "test input: unknown command '%s'\n", c);
@@ -684,6 +797,7 @@ static void on_vblank(void) {
     uint8_t ax = 128, ay = 128, rx = 128, ry = 128, tx, ty;
     uint32_t pad = pad_state(&ax, &ay, &rx, &ry);
     test_input(&pad);
+    if (g_ti.stick > 0) { g_ti.stick--; ax = (uint8_t)g_ti.sx; ay = (uint8_t)g_ti.sy; }
     {   /* L3 opens and closes the party finder, as F2 does */
         static int prev;
         if (g_pad_party && !prev) g_party_latched |= MI_TOGGLE;
@@ -707,6 +821,7 @@ static void on_vblank(void) {
         uint32_t inject = 0;
         const int was_open = party_ui_open();
         const int grab = party_ui_update(g_menu.open ? 0 : held & ~MI_TOGGLE, g_menu.open ? 0 : g_party_latched, &inject);
+        lobby_set_weapons(party_ui_weapons());          /* the lobby menu's option */
         g_party_latched = 0;
         /* open, or closed by this very press: what is held now is the panel's, not the game's */
         if (grab || was_open || grabbed) hide = pad | g_touch_bits;

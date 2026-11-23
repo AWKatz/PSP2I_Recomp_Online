@@ -114,6 +114,13 @@ void mmo_party_report(int role, int members, int max, int open, const uint8_t le
     party_send();
 }
 
+void mmo_party_keep(void) {
+    if (!g_adhocctl || g_party_role == PSP_MMO_PARTY_NONE) { mmo_party_report(0, 0, 0, 0, NULL); return; }
+    uint8_t lm[6];
+    memcpy(lm, g_party_leader, 6);
+    mmo_party_report(g_party_role, g_party_members, g_party_max, 0, g_party_role == PSP_MMO_PARTY_MEMBER ? lm : NULL);
+}
+
 int psp_net_mmo_party_role(void) { return g_party_role; }
 
 void psp_net_mmo_get_status(psp_net_mmo_status *o) {
@@ -138,6 +145,27 @@ int psp_net_mmo_parties(psp_net_mmo_party *out, int max, int *players, unsigned 
     if (players) *players = g_players_online;
     if (generation) *generation = g_parties_gen;
     return n;
+}
+
+static psp_net_mmo_warp g_warp_in;
+static int g_warp_have;
+
+void psp_net_mmo_party_warp(const psp_net_mmo_warp *w) {
+    uint8_t m[PSP_MMO_PARTY_WARP_LEN];
+    memset(m, 0, sizeof m);
+    psp_mmo_put_hdr(m, MSG_C2S_PARTY_WARP);
+    psp_mmo_put_u32(m + 8, (uint32_t)w->dest);
+    psp_mmo_put_u16(m + 12, (uint16_t)w->area_index);
+    psp_mmo_put_u16(m + 14, (uint16_t)w->zone);
+    psp_mmo_put_u16(m + 16, (uint16_t)w->entry);
+    ctrl_send(m, sizeof m);
+}
+
+int psp_net_mmo_take_warp(psp_net_mmo_warp *out) {
+    if (!g_warp_have) return 0;
+    g_warp_have = 0;
+    *out = g_warp_in;
+    return 1;
 }
 
 static void on_party_list(const uint8_t *d, uint32_t len) {
@@ -322,6 +350,15 @@ static void on_packet(const psp_net_packet *p, void *user) {
         psp_net_log("mmo: MSG_S2C_HANDSHAKE_ACK status %u, session %llu", status, (unsigned long long)sid);
     } else if (type == MSG_S2C_PARTY_LIST) {
         on_party_list(p->data, p->len);
+    } else if (type == MSG_S2C_PARTY_WARP && p->len >= PSP_MMO_PARTY_WARP_LEN) {
+        const uint8_t *d = p->data;
+        g_warp_in.dest = (int32_t)psp_mmo_get_u32(d + 8);
+        g_warp_in.area_index = (int16_t)psp_mmo_get_u16(d + 12);
+        g_warp_in.zone = (int16_t)psp_mmo_get_u16(d + 14);
+        g_warp_in.entry = (int16_t)psp_mmo_get_u16(d + 16);
+        g_warp_have = 1;
+        psp_net_log("mmo: party warp to destination %d, area index %d, zone %d, entry %d", g_warp_in.dest, g_warp_in.area_index,
+                    g_warp_in.zone, g_warp_in.entry);
     } else {
         psp_net_log("mmo: control message 0x%04X (%u bytes) ignored", type, p->len);
     }
