@@ -1,0 +1,18 @@
+#!/bin/sh
+# AppImage entry point for the game. The game's own files (EBOOT.BIN, psp2i.ini, GameData/,
+# client_config.toml, ...) are read from, in order:
+#   $PSP2I_DATA, if set;
+#   the folder holding the .AppImage, if EBOOT.BIN is there (a portable install);
+#   ~/.local/share/psp2i (created on first run).
+HERE="$(dirname "$(readlink -f "$0")")"
+if [ -z "$PSP2I_DATA" ]; then
+    if [ -n "$APPIMAGE" ] && [ -f "$(dirname "$APPIMAGE")/EBOOT.BIN" ]; then
+        PSP2I_DATA="$(dirname "$APPIMAGE")"
+    else
+        PSP2I_DATA="${XDG_DATA_HOME:-$HOME/.local/share}/psp2i"
+    fi
+fi
+export PSP2I_DATA
+mkdir -p "$PSP2I_DATA/GameData/flash/font" "$PSP2I_DATA/GameData/ms/PSP/SAVEDATA"
+cd "$PSP2I_DATA" || exit 1
+exec "$HERE/usr/bin/psp2i" "$@"

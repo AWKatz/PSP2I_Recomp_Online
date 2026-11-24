@@ -87,7 +87,7 @@ int psp_net_mmo_connected(void) { return g_joined; }
 
 /* ---- the party directory ------------------------------------------------------------------ */
 
-static void ctrl_send(const uint8_t *m, uint32_t len) {
+void mmo_ctrl_send(const uint8_t *m, uint32_t len) {
     if (!g_joined) return;
     const psp_net_transport *t = psp_net_get_transport();
     psp_net_peer server = { { 0 }, 1 };
@@ -99,7 +99,7 @@ static void party_send(void) {
     psp_mmo_put_hdr(m, MSG_C2S_PARTY_STATE);
     m[8] = (uint8_t)g_party_role; m[9] = (uint8_t)g_party_members; m[10] = (uint8_t)g_party_max; m[11] = (uint8_t)g_party_open;
     memcpy(m + 12, g_party_leader, 6);
-    ctrl_send(m, sizeof m);
+    mmo_ctrl_send(m, sizeof m);
 }
 
 void mmo_party_report(int role, int members, int max, int open, const uint8_t leader_mac[6]) {
@@ -137,7 +137,7 @@ static unsigned g_parties_gen;
 void psp_net_mmo_request_parties(void) {
     uint8_t m[PSP_MMO_PARTY_LIST_REQ_LEN];
     psp_mmo_put_hdr(m, MSG_C2S_PARTY_LIST_REQ);
-    ctrl_send(m, sizeof m);
+    mmo_ctrl_send(m, sizeof m);
 }
 
 int psp_net_mmo_parties(psp_net_mmo_party *out, int max, int *players, unsigned *generation) {
@@ -160,7 +160,7 @@ void psp_net_mmo_party_warp(const psp_net_mmo_warp *w) {
     psp_mmo_put_u16(m + 14, (uint16_t)w->zone);
     psp_mmo_put_u16(m + 16, (uint16_t)w->entry);
     psp_mmo_put_u16(m + 18, w->flags);
-    ctrl_send(m, sizeof m);
+    mmo_ctrl_send(m, sizeof m);
 }
 
 int psp_net_mmo_take_warp(psp_net_mmo_warp *out) {
@@ -350,6 +350,8 @@ static void on_packet(const psp_net_packet *p, void *user) {
         uint64_t sid = 0; for (int i = 7; i >= 0; i--) sid = (sid << 8) | d[4 + i];
         g_session = sid;
         psp_net_log("mmo: MSG_S2C_HANDSHAKE_ACK status %u, session %llu", status, (unsigned long long)sid);
+    } else if (type >= MSG_S2C_NP2_REPLY && type <= MSG_S2C_NP2_ROOM_MSG) {
+        mmo_matching2_on_packet(p->data, p->len);
     } else if (type == MSG_S2C_PARTY_LIST) {
         on_party_list(p->data, p->len);
     } else if (type == MSG_S2C_PARTY_WARP && p->len >= PSP_MMO_PARTY_WARP_LEN) {
@@ -381,6 +383,7 @@ void psp_net_mmo_pump(void) {
     }
     mmo_matching_pump();
     mmo_np_pump();
+    mmo_matching2_pump();
 }
 
 /* ---- the PSN sign-in dialog (Internet Multi Mode) ------------------------------------------ */
@@ -417,6 +420,7 @@ void psp_net_mmo_register(void) {
         psp_hle_register(nid, lib, name, hle_traced);
     }
     mmo_np_register();
+    mmo_matching2_register();
     mmo_np_set_name(g_name);
     psp_hle_register(0xA7BB7C67, "sceUtility", "sceUtilityPsnInitStart", hle_PsnInitStart);
     psp_hle_register(0x0940A1B9, "sceUtility", "sceUtilityPsnUpdate", hle_PsnUpdate);

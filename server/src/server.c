@@ -34,7 +34,21 @@ typedef struct {
     /* party directory (MSG_C2S_PARTY_STATE) */
     uint8_t  party_role, party_members, party_max, party_open;
     uint8_t  party_leader[6];
+    /* Internet Multi Mode room (-1 = none) and our member id in it */
+    int      room;
+    uint16_t member_id;
 } session;
+
+/* An Internet Multi Mode room: a 12-player lobby room or a party room. */
+#define MAX_ROOMS 32
+typedef struct {
+    int      used;
+    uint64_t id;
+    uint16_t max, owner, next_member;
+    uint32_t flags;
+    uint16_t attrs_len;
+    uint8_t  attrs[PSP_MMO_NP2_ATTRS_MAX];
+} room;
 
 struct srv {
     srv_config cfg;
@@ -51,6 +65,8 @@ struct srv {
     loot_rng    rng;
     uint64_t    drops_sig, rates_sig;  /* content signatures of the config files (0 = missing) */
     uint64_t    next_drop_id;
+    room        rooms[MAX_ROOMS];
+    uint64_t    next_room_id;
     uint32_t    events;
 };
 
@@ -168,6 +184,190 @@ static void on_handshake(srv *s, session *ss, const psp_net_packet *p) {
 
 /* ---- transport hooks -------------------------------------------------------------- */
 
+/* ---- Internet Multi Mode rooms (net_proto.h: MSG_*_NP2_*) ----------------------------------- */
+
+static void send_to(srv *s, uint64_t id, const uint8_t *m, uint32_t n) {
+    const psp_net_transport *t = psp_net_enet_transport(s->enet);
+    const psp_net_peer to = { { 0 }, id };
+    t->send_packet(t->ctx, &to, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, m, n);
+}
+
+static int room_members(const srv *s, int r) {
+    int n = 0;
+    for (int i = 0; i < MAX_SESSIONS; i++) n += s->sess[i].state == SS_ACTIVE && s->sess[i].room == r;
+    return n;
+}
+
+/* The member's IPv4 address in network order, as the transport sees it (0 = unknown). */
+static uint32_t member_addr(srv *s, const session *ss) {
+    char a[64];
+    if (psp_net_enet_peer_address(s->enet, ss->id, a, sizeof a) != 0) return 0;
+    unsigned b[4];
+    if (sscanf(a, "%u.%u.%u.%u", &b[0], &b[1], &b[2], &b[3]) != 4) return 0;
+    return (uint32_t)(b[0] | b[1] << 8 | b[2] << 16 | b[3] << 24);
+}
+
+static uint32_t put_member(srv *s, uint8_t *m, const session *ss) {
+    psp_mmo_put_u16(m, ss->member_id);
+    memset(m + 2, 0, PSP_MMO_NP2_NAME_LEN);
+    memcpy(m + 2, ss->name, strnlen(ss->name, PSP_MMO_NP2_NAME_LEN - 1));
+    psp_mmo_put_u32(m + 2 + PSP_MMO_NP2_NAME_LEN, member_addr(s, ss));
+    return PSP_MMO_NP2_MEMBER_LEN;
+}
+
+static uint32_t put_room(const srv *s, uint8_t *m, int r) {
+    const room *rm = &s->rooms[r];
+    psp_mmo_put_u64(m, rm->id);
+    psp_mmo_put_u16(m + 8, rm->max);
+    psp_mmo_put_u16(m + 10, (uint16_t)room_members(s, r));
+    psp_mmo_put_u16(m + 12, rm->owner);
+    memset(m + 14, 0, PSP_MMO_NP2_NAME_LEN);
+    for (int i = 0; i < MAX_SESSIONS; i++)
+        if (s->sess[i].state == SS_ACTIVE && s->sess[i].room == r && s->sess[i].member_id == rm->owner)
+            memcpy(m + 14, s->sess[i].name, strnlen(s->sess[i].name, PSP_MMO_NP2_NAME_LEN - 1));
+    psp_mmo_put_u32(m + 14 + PSP_MMO_NP2_NAME_LEN, rm->flags);
+    psp_mmo_put_u16(m + 18 + PSP_MMO_NP2_NAME_LEN, rm->attrs_len);
+    memcpy(m + PSP_MMO_NP2_ROOM_HDR_LEN, rm->attrs, rm->attrs_len);
+    return PSP_MMO_NP2_ROOM_HDR_LEN + rm->attrs_len;
+}
+
+static void np2_status(srv *s, session *ss, uint32_t req, uint32_t status) {
+    uint8_t m[16];
+    psp_mmo_put_hdr(m, MSG_S2C_NP2_REPLY);
+    psp_mmo_put_u32(m + 8, req); psp_mmo_put_u32(m + 12, status);
+    send_to(s, ss->id, m, sizeof m);
+}
+
+/* To every member of room r but `except`: who joined or left. */
+static void room_tell(srv *s, int r, const session *who, int joined, const session *except) {
+    uint8_t m[8 + 8 + 1 + 2 + PSP_MMO_NP2_MEMBER_LEN];
+    psp_mmo_put_hdr(m, MSG_S2C_NP2_MEMBER);
+    psp_mmo_put_u64(m + 8, s->rooms[r].id);
+    m[16] = (uint8_t)joined;
+    psp_mmo_put_u16(m + 17, s->rooms[r].owner);
+    put_member(s, m + 19, who);
+    for (int i = 0; i < MAX_SESSIONS; i++) {
+        const session *o = &s->sess[i];
+        if (o->state == SS_ACTIVE && o->room == r && o != except) send_to(s, o->id, m, sizeof m);
+    }
+}
+
+/* The create / join reply: the room, my member id, every member. */
+static void room_joined_reply(srv *s, session *ss, uint32_t req) {
+    static uint8_t m[8 + 8 + PSP_MMO_NP2_ROOM_HDR_LEN + PSP_MMO_NP2_ATTRS_MAX + 2 + PSP_MMO_NP2_ROOM_MAX * PSP_MMO_NP2_MEMBER_LEN];
+    psp_mmo_put_hdr(m, MSG_S2C_NP2_REPLY);
+    psp_mmo_put_u32(m + 8, req); psp_mmo_put_u32(m + 12, PSP_MMO_NP2_OK);
+    uint32_t n = 16 + put_room(s, m + 16, ss->room);
+    psp_mmo_put_u16(m + n, ss->member_id); n += 2;
+    for (int i = 0; i < MAX_SESSIONS; i++) {
+        const session *o = &s->sess[i];
+        if (o->state == SS_ACTIVE && o->room == ss->room) n += put_member(s, m + n, o);
+    }
+    send_to(s, ss->id, m, n);
+}
+
+static void room_leave(srv *s, session *ss) {
+    const int r = ss->room;
+    if (r < 0 || r >= MAX_ROOMS || !s->rooms[r].used) { ss->room = -1; return; }
+    ss->room = -1;
+    room *rm = &s->rooms[r];
+    if (room_members(s, r) == 0) {
+        slog(s, "rooms: room %llu closed (last member '%s' left)", (unsigned long long)rm->id, ss->name);
+        rm->used = 0;
+        return;
+    }
+    if (rm->owner == ss->member_id) {                 /* the next member takes over */
+        for (int i = 0; i < MAX_SESSIONS; i++)
+            if (s->sess[i].state == SS_ACTIVE && s->sess[i].room == r) { rm->owner = s->sess[i].member_id; break; }
+    }
+    room_tell(s, r, ss, 0, NULL);
+    slog(s, "rooms: '%s' left room %llu (%d left)", ss->name, (unsigned long long)rm->id, room_members(s, r));
+}
+
+static void room_enter(srv *s, session *ss, int r) {
+    room_leave(s, ss);
+    ss->room = r;
+    ss->member_id = ++s->rooms[r].next_member;
+}
+
+static void on_np2_search(srv *s, session *ss, const psp_net_packet *p) {
+    if (p->len < 12) return;
+    static uint8_t m[8 + 8 + 2 + MAX_ROOMS * (PSP_MMO_NP2_ROOM_HDR_LEN + PSP_MMO_NP2_ATTRS_MAX)];
+    psp_mmo_put_hdr(m, MSG_S2C_NP2_REPLY);
+    psp_mmo_put_u32(m + 8, psp_mmo_get_u32(p->data + 8)); psp_mmo_put_u32(m + 12, PSP_MMO_NP2_OK);
+    uint32_t n = 18;
+    uint16_t c = 0;
+    for (int r = 0; r < MAX_ROOMS; r++) {
+        if (!s->rooms[r].used || n + PSP_MMO_NP2_ROOM_HDR_LEN + s->rooms[r].attrs_len > 1100) continue;   /* one datagram */
+        n += put_room(s, m + n, r);
+        c++;
+    }
+    psp_mmo_put_u16(m + 16, c);
+    send_to(s, ss->id, m, n);
+}
+
+static void on_np2_create(srv *s, session *ss, const psp_net_packet *p) {
+    if (p->len < 22) return;
+    const uint32_t req = psp_mmo_get_u32(p->data + 8);
+    const uint16_t attrs_len = psp_mmo_get_u16(p->data + 20);
+    uint16_t max = psp_mmo_get_u16(p->data + 12);
+    if (attrs_len > PSP_MMO_NP2_ATTRS_MAX || 22u + attrs_len > p->len || max < 1) { np2_status(s, ss, req, PSP_MMO_NP2_ERR_BAD); return; }
+    if (max > PSP_MMO_NP2_ROOM_MAX) max = PSP_MMO_NP2_ROOM_MAX;   /* the original servers' limit */
+    int r = -1;
+    for (int i = 0; i < MAX_ROOMS && r < 0; i++) if (!s->rooms[i].used) r = i;
+    if (r < 0) { np2_status(s, ss, req, PSP_MMO_NP2_ERR_SERVER_FULL); return; }
+    room *rm = &s->rooms[r];
+    memset(rm, 0, sizeof *rm);
+    rm->used = 1;
+    rm->id = ++s->next_room_id;
+    rm->max = max;
+    rm->flags = psp_mmo_get_u32(p->data + 16);
+    rm->attrs_len = attrs_len;
+    memcpy(rm->attrs, p->data + 22, attrs_len);
+    room_enter(s, ss, r);
+    rm->owner = ss->member_id;
+    slog(s, "rooms: '%s' created room %llu (%u players max)", ss->name, (unsigned long long)rm->id, (unsigned)max);
+    room_joined_reply(s, ss, req);
+}
+
+static void on_np2_join(srv *s, session *ss, const psp_net_packet *p) {
+    if (p->len < 20) return;
+    const uint32_t req = psp_mmo_get_u32(p->data + 8);
+    const uint64_t id = psp_mmo_get_u64(p->data + 12);
+    int r = -1;
+    for (int i = 0; i < MAX_ROOMS && r < 0; i++) if (s->rooms[i].used && s->rooms[i].id == id) r = i;
+    if (r < 0) { np2_status(s, ss, req, PSP_MMO_NP2_ERR_NO_ROOM); return; }
+    if (ss->room != r && room_members(s, r) >= s->rooms[r].max) { np2_status(s, ss, req, PSP_MMO_NP2_ERR_FULL); return; }
+    if (ss->room != r) room_enter(s, ss, r);
+    slog(s, "rooms: '%s' joined room %llu (%d/%u)", ss->name, (unsigned long long)id, room_members(s, r), (unsigned)s->rooms[r].max);
+    room_joined_reply(s, ss, req);
+    room_tell(s, r, ss, 1, ss);
+}
+
+static void on_np2_leave(srv *s, session *ss, const psp_net_packet *p) {
+    if (p->len < 20) return;
+    room_leave(s, ss);
+    np2_status(s, ss, psp_mmo_get_u32(p->data + 8), PSP_MMO_NP2_OK);
+}
+
+/* A room message: relayed to every other member, or to one. */
+static void on_np2_room_msg(srv *s, session *ss, const psp_net_packet *p) {
+    if (p->len < 20 || ss->room < 0) return;
+    const uint16_t to = psp_mmo_get_u16(p->data + 16), size = psp_mmo_get_u16(p->data + 18);
+    if (size > PSP_MMO_NP2_MSG_MAX || 20u + size > p->len) return;
+    static uint8_t m[20 + PSP_MMO_NP2_MSG_MAX];
+    psp_mmo_put_hdr(m, MSG_S2C_NP2_ROOM_MSG);
+    psp_mmo_put_u64(m + 8, s->rooms[ss->room].id);
+    psp_mmo_put_u16(m + 16, ss->member_id);
+    psp_mmo_put_u16(m + 18, size);
+    memcpy(m + 20, p->data + 20, size);
+    for (int i = 0; i < MAX_SESSIONS; i++) {
+        const session *o = &s->sess[i];
+        if (o->state != SS_ACTIVE || o->room != ss->room || o == ss || (to && o->member_id != to)) continue;
+        send_to(s, o->id, m, 20u + size);
+    }
+}
+
 static void on_peer(void *u, uint64_t id, const uint8_t mac[6], int joined) {
     srv *s = u;
     (void)mac;
@@ -181,11 +381,13 @@ static void on_peer(void *u, uint64_t id, const uint8_t mac[6], int joined) {
         ss->joined_ms = s->now_ms;
         ss->tokens = 2.0 * s->cfg.rate_pps;
         ss->kill_tokens = 2.0 * s->cfg.kills_per_sec;
+        ss->room = -1;
         return;
     }
     session *ss = find(s, id);
     if (!ss) return;
     if (ss->state == SS_ACTIVE) slog(s, "player '%s' left (session %llu)", ss->name, (unsigned long long)id);
+    room_leave(s, ss);
     memset(ss, 0, sizeof *ss);
 }
 
@@ -413,6 +615,11 @@ static void on_packet(const psp_net_packet *p, void *u) {
     else if (type == MSG_C2S_PARTY_STATE) on_party_state(s, ss, p);
     else if (type == MSG_C2S_PARTY_LIST_REQ) on_party_list_req(s, ss);
     else if (type == MSG_C2S_PARTY_WARP) on_party_warp(s, ss, p);
+    else if (type == MSG_C2S_NP2_SEARCH) on_np2_search(s, ss, p);
+    else if (type == MSG_C2S_NP2_CREATE) on_np2_create(s, ss, p);
+    else if (type == MSG_C2S_NP2_JOIN) on_np2_join(s, ss, p);
+    else if (type == MSG_C2S_NP2_LEAVE) on_np2_leave(s, ss, p);
+    else if (type == MSG_C2S_NP2_ROOM_MSG) on_np2_room_msg(s, ss, p);
 }
 
 /* ---- lifecycle ---------------------------------------------------------------------- */
@@ -421,7 +628,7 @@ srv *srv_create(const srv_config *cfg) {
     srv *s = calloc(1, sizeof *s);
     if (!s) return NULL;
     s->cfg = *cfg;
-    if (s->cfg.max_players < 1) s->cfg.max_players = 32;
+    if (s->cfg.max_players < 1) s->cfg.max_players = SRV_MAX_PLAYERS;
     if (s->cfg.max_players > SRV_MAX_PLAYERS) s->cfg.max_players = SRV_MAX_PLAYERS;   /* the hub cap */
     if (!s->cfg.rate_pps) s->cfg.rate_pps = 120;
     if (!s->cfg.handshake_timeout_ms) s->cfg.handshake_timeout_ms = 5000;

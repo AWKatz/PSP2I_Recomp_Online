@@ -2,7 +2,7 @@
 Type=Application
 Name=PSP2i Recompiled
 Comment=Phantasy Star Portable 2 Infinity, statically recompiled
-Exec=psp2i-launch
-Icon=io.github.zmbkilla.PSP2iRecomp
+Exec=psp2i
+Icon=psp2i
 Categories=Game;RolePlaying;
 Terminal=false

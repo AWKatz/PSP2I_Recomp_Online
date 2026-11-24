@@ -1,0 +1,18 @@
+#!/bin/sh
+# AppImage entry point for the dedicated server. It runs in a data folder holding its
+# database and config/ (drop_tables.json, rates.toml; the defaults are copied in on
+# first run):
+#   $PSP2I_SERVER_DATA, if set;
+#   else psp2i_server_data/ next to the .AppImage.
+# Arguments go to the server as they are, e.g. --lan, --port, --max-players.
+HERE="$(dirname "$(readlink -f "$0")")"
+if [ -z "$PSP2I_SERVER_DATA" ]; then
+    if [ -n "$APPIMAGE" ]; then PSP2I_SERVER_DATA="$(dirname "$APPIMAGE")/psp2i_server_data"
+    else PSP2I_SERVER_DATA="$PWD/psp2i_server_data"; fi
+fi
+mkdir -p "$PSP2I_SERVER_DATA/config"
+for f in "$HERE"/usr/share/psp2i_server/config/*; do
+    [ -e "$PSP2I_SERVER_DATA/config/$(basename "$f")" ] || cp "$f" "$PSP2I_SERVER_DATA/config/"
+done
+cd "$PSP2I_SERVER_DATA" || exit 1
+exec "$HERE/usr/bin/psp2i_server" "$@"

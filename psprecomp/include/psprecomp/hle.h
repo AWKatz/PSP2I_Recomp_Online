@@ -347,6 +347,9 @@ void     psp_sched_dump(FILE *out);
 /* Call guest code as an interrupt handler would run (GE callbacks). */
 uint32_t psp_call_guest(uint32_t func, uint32_t a0, uint32_t a1, uint32_t a2);
 uint32_t psp_call_guest5(uint32_t func, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+uint32_t psp_call_guest8(uint32_t func, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3,
+                         uint32_t t0, uint32_t t1, uint32_t t2, uint32_t t3);   /* $a0-$a3, $t0-$t3 */
+uint32_t psp_call_guest6(uint32_t func, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5);  /* a4 = $t0, a5 = $t1 */
 uint32_t psp_sched_call_interrupt(uint32_t func, uint32_t a0, uint32_t a1);
 /* Queue a call into guest code from a firmware library (up to five arguments,
  * the fifth in $t0), delivered at the next vblank on the interrupt stack. */

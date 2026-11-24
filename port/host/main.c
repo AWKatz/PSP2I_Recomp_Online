@@ -1643,8 +1643,19 @@ static void take_dump(uint64_t vb) {
 static volatile LONG g_prof_on = 0;
 static uint64_t g_prof_from, g_prof_to;
 
+#ifdef PSPRECOMP_MMO_NET
+#include "mmo_client.h"
+static FILE *g_net_log;                  /* logs/net_log.txt: the network layer's lines */
+static void net_line(const char *line) {
+    if (g_net_log) { fprintf(g_net_log, "net: %s\n", line); fflush(g_net_log); }
+}
+#endif
+
 static void on_vblank(void) {
     uint64_t vb = psp_sched_vblank_count();
+#ifdef PSPRECOMP_MMO_NET
+    mmo_client_frame();                   /* server messages, matching and room callbacks */
+#endif
     g_prof_on = g_prof_keyed ? g_prof_keyon : vb >= g_prof_from && (!g_prof_to || vb < g_prof_to);
     {   /* PSP2I_DRAW_DUMP_AT=VBLANK: F12's dump at that vblank (scripted runs) */
         static long long at = -2;
@@ -2823,6 +2834,15 @@ int main(int argc, char **argv) {
      * backed up before the game writes over it; see psprecomp utility.c). */
     psp_net_set_forced_off(1);            /* no online play: the WLAN switch reads off */
     gamelog_init(dir);
+#ifdef PSPRECOMP_MMO_NET
+    {   /* MMO build: the network back on, through our server (client_config.toml next to the exe) */
+        char np[700];
+        log_path(np, sizeof np, dir, "net_log.txt");
+        g_net_log = log_open_rotated(np);
+        psp_net_set_log(net_line);
+        mmo_client_init(dir);
+    }
+#endif
     modelx_init();                        /* model names as packages load (EXTRACT MODELS) */
     {
         char xd[600];
@@ -2882,6 +2902,9 @@ int main(int argc, char **argv) {
      * delays the process ending; the logs are written, so end it here. */
     fflush(NULL);
     if (g_close_at || g_quit_at) TerminateProcess(GetCurrentProcess(), (UINT)rc);
+#endif
+#ifdef PSPRECOMP_MMO_NET
+    mmo_client_shutdown();
 #endif
     return rc;
 }

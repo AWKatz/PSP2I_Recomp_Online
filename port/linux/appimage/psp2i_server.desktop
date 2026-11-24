@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=PSP2i Server
+Comment=PSP2i Recompiled dedicated server (LAN or online)
+Exec=psp2i_server
+Icon=psp2i
+Categories=Game;Network;
+Terminal=true

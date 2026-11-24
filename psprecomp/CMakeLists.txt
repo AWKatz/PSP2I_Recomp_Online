@@ -68,7 +68,7 @@ target_include_directories(psprecomp PUBLIC
 # the single-player runtime is built from exactly the sources above. A game
 # repo passes -DENABLE_MMO_NET=ON (the client) or -DBUILD_DEDICATED_SERVER=ON
 # (a headless server, which links only psprecomp_net: no game runtime).
-option(ENABLE_MMO_NET "Build the MMO network transport layer" OFF)
+option(ENABLE_MMO_NET "Build the online client (the original PSN/SEGA services through our server); OFF: offline only" ON)
 option(BUILD_DEDICATED_SERVER "Build the network library for a dedicated server" OFF)
 if(ENABLE_MMO_NET OR BUILD_DEDICATED_SERVER)
     # ENet (MIT), built from source and linked statically: no runtime dependency.
@@ -97,7 +97,7 @@ if(ENABLE_MMO_NET OR BUILD_DEDICATED_SERVER)
     endif()
 endif()
 if(ENABLE_MMO_NET)
-    target_sources(psprecomp PRIVATE src/net/adhoc_mmo.c src/net/adhoc_matching.c src/net/adhoc_sockets.c src/net/np_mmo.c)
+    target_sources(psprecomp PRIVATE src/net/adhoc_mmo.c src/net/adhoc_matching.c src/net/adhoc_sockets.c src/net/np_mmo.c src/net/np_matching2.c)
     target_compile_definitions(psprecomp PUBLIC PSPRECOMP_MMO_NET=1)
     target_link_libraries(psprecomp PUBLIC psprecomp_net)
 endif()

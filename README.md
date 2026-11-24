@@ -12,46 +12,57 @@
 
 A fork of the recompilation project for **Phantasy Star Portable 2 Infinity (PSP2i)**, bringing the game PC/macOS/Linux environments while preserving the original game's functionality and feel.
 
-**This fork (PSP2I_Recomp_Online)** adds online play: an MMO-capable client build with the ability to warp to other lobby zones similar to PSO/PSU, lets you show off your characters weapons and gear in the lobby and supports up to 32 players per dedicated server, with an easy to use web admin panel. Player limits match the original game servers: 12 players per Internet Multi Mode lobby room and 4 players per Multi Mode party. The single-player build is unchanged unless you build with `-DENABLE_MMO_NET=ON` (client) or `-DBUILD_DEDICATED_SERVER=ON` (server).
+**This fork (PSP2I_Recomp_Online)** brings back the game's online play as it was on the original PSN and SEGA servers, as a standing reproduction for small groups of players. You run a small server of your own, on your LAN or for friends, and the game connects to it as it once did to the official services: the online Terms of Use and Notices, the matching server, Internet Multi Mode's lobby rooms, and Multi Mode parties. Player limits are the original servers': 12 players per lobby room and 4 per party, with up to 12 players on a server. A few extras sit on top: warping your party around the lobby, showing your weapons in the lobby, and a simple web admin panel.
 
-Online features at a glance (MMO builds):
+The game builds with online play by default; Story Mode plays as before. To build without it, see [Quick Start](#quick-start).
+
+Online features at a glance:
 
 - **Party finder**: pick a party being hosted on the server, or start your own, from the Matching Counter.
 - **Lobby warps**: the party leader takes the whole party to any of ten rooms of the Multi Mode lobby (Bridge, Cafe, Battle Shop, Style Shop, Little Wing and more).
 - **Weapons in the lobby**: the party leader can let everyone draw their weapons in the lobby to show off their gear, or keep the original game's look.
 - **Player limits as on the original servers**: Internet Multi Mode lobby rooms hold 12 players and Multi Mode parties hold 4, 1:1 with the original game servers. The server runs several lobby rooms side by side to reach its total.
-- **Dedicated server**: up to 32 players in total, server-side loot, SQLite persistence and a web admin panel.
+- **Your own server**: stands in for the original PSN and SEGA services for up to 12 players, with server-side loot, SQLite persistence and a simple web admin panel.
 
 ## Quick Start
 
-You need your own copy of the game: a decrypted `EBOOT.BIN` (needed to build) and the disc image (`.iso`). Everything that gets built or generated goes into `build/`.
+You need your own copy of the game: the disc image (`.iso`) and a decrypted `EBOOT.BIN`. The game is built on your machine from your `EBOOT.BIN`, so there are no prebuilt downloads.
 
-### Build and play
+**1. Put `EBOOT.BIN` in the repository root.**
 
-| Platform | Build | Run | Your game files go in |
+**2. Build.**
+
+| Platform | Install once | Build | You get |
 | --- | --- | --- | --- |
-| macOS (Apple Silicon) | `brew install cmake ninja sdl3 ffmpeg`<br>`./build_macos.sh` | `./Launch-PSP2i.command` | the repository root |
-| Linux / Steam Deck | `port/linux/flatpak/build_flatpak.sh` | `flatpak run io.github.zmbkilla.PSP2iRecomp` | `~/.var/app/io.github.zmbkilla.PSP2iRecomp/data/psp2i/` |
-| Windows | `build_port.bat regen` (needs Visual Studio and CMake) | `build\windows\Release\psp2i.exe` | the folder with `psp2i.exe` |
-| Windows release copy | `build_finalbuild.bat` (or `build_prod.bat` for the community build) | `build\dist\psp2i.exe` (`build\prod\psp2i.exe`) | the folder with `psp2i.exe` |
-| Android | `build_android.bat` (see [port/android](port/android/README.md)) | install `build\dist\psp2i-android.apk` | the folder the app asks for on first start |
+| macOS (Apple Silicon) | `brew install cmake ninja sdl3 ffmpeg` | `./build_macos.sh` | `Launch-PSP2i.command` (repository root) |
+| Linux / Steam Deck | the packages in [port/linux](port/linux/README.md) | `port/linux/appimage/build_appimage.sh` | `build/PSP2i-x86_64.AppImage` |
+| Windows | Visual Studio and CMake | `build_finalbuild.bat` | `build\dist\psp2i.exe` |
+| Android | see [port/android](port/android/README.md) | `build_android.bat` | `build\dist\psp2i-android.apk` |
 
-To build, put `EBOOT.BIN` in the repository root. The build scripts generate `build/gen` from it.
+The build includes online play and the server (`psp2i_server`); see [Online play and the server](#online-play-and-the-server). For a game without online play: `./build_macos.sh --offline`, `port/linux/appimage/build_appimage.sh --offline`, or `build_port.bat offline` on Windows.
 
-To play on macOS or Linux, put these in the folder from the last column. Windows has its own layout, with the extracted disc under `GameData\disc\`; see [port/prod_README.txt](port/prod_README.txt). Android: see [port/android](port/android/README.md).
+**3. Put your game files in the game folder and play.**
+
+The game folder is the folder holding what you got in step 2: the repository root on macOS, the folder with the AppImage on Linux, the folder with `psp2i.exe` on Windows. On Android, the app asks for a folder on first start. Every platform uses the same layout:
 
 ```
-EBOOT.BIN                             the decrypted game executable
-psp2i.ini                             settings: iso=game.iso (path to your disc image), fps=, resolution= (see below)
-GameData/flash/font/*.pgf             PSP firmware fonts (without them, menu text is missing)
-GameData/ms/PSP/SAVEDATA/NPJH50332/   your save: copy PPSSPP's memstick/PSP/SAVEDATA/NPJH50332 folder as is
-client_config.toml                    MMO builds only (see below)
-TEXTURES/NPJH50332/textures.ini + PNGs  an HD texture pack made for PPSSPP (macOS, Linux, Android)
+your .iso                    the game's disc image, any name: the first .iso in the folder is used
+EBOOT.BIN                    the decrypted game executable
+GameData/flash/font/*.pgf    PSP firmware fonts (without them, menu text is missing)
+GameData/ms/PSP/SAVEDATA/    saves: copy PPSSPP's memstick/PSP/SAVEDATA/NPJH50332 folder here to continue
+psp2i.ini                    optional settings (see below); created when you change one in game
+TEXTURES/NPJH50332/          optional: an HD texture pack made for PPSSPP (macOS, Linux, Android)
+client_config.toml           online builds: which server to join (found on the LAN by default)
+terms_of_use.txt, notices.txt   online builds, server owners: the texts shown when players connect
 ```
+
+Then run it. If something is missing, the game says what and where.
 
 HD textures use PPSSPP's pack format and hashing, so PPSSPP packs work as they are: copy the whole `memstick/PSP/TEXTURES/NPJH50332` folder, including its `textures.ini`. Two environment variables help:
 - `PSP2I_TEXTURES=DIR` uses a pack from somewhere else.
 - `PSP2I_TEXDUMP=1` writes every texture the pack doesn't replace to `<pack>/new/` (as `<hash>.png`, listed in `new/textures.ini`), which is how packs are made.
+
+Other Windows build scripts: `build_port.bat regen` (a development build in `build\windows\Release\`) and `build_prod.bat` (the community build in `build\prod\`). The older Windows layout, with the extracted disc in `GameData\disc\`, still works; see [port/prod_README.txt](port/prod_README.txt).
 
 ### Frame rate and resolution
 
@@ -89,14 +100,14 @@ The keyboard uses PPSSPP's default layout. Click the game window first. A gamepa
 | Start | Space | Start / Menu |
 | Select | V (or Enter) | Back / View |
 | Settings menu | F1 | R3 or Guide |
-| Party finder / lobby menu (MMO builds) | F2 | L3 (left stick click) |
+| Party finder / lobby menu | F2 | L3 (left stick click) |
 
 This is the Japanese release, so Circle confirms and Cross cancels. On Windows the keys can be rebound in the settings menu (CONTROLS > KEYBOARD/MOUSE).
 
-### MMO client and dedicated server
+### Online play and the server
 
 ```sh
-./build_macos.sh --mmo        # build/macos-mmo/psp2i and build/macos-mmo/server/psp2i_server
+./build_macos.sh              # build/macos/psp2i and build/macos/server/psp2i_server
 cmake -S server -B build/server -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build/server    # the server alone, any OS: build/server/psp2i_server
 cd server && ../build/server/psp2i_server --lan    # run it where config/ is, or pass --drop-tables/--rates
@@ -111,7 +122,7 @@ cd server && ../build/server/psp2i_server --lan    # run it where config/ is, or
 | `--bind ADDR` | all interfaces | address to listen on |
 | `--lan-port N` | 29000 | LAN discovery port (UDP) |
 | `--name NAME` | PSP2i Server | name shown to LAN clients |
-| `--max-players N` | 32 | 1–32: players on the server in total (each Internet Multi Mode lobby room still holds 12, each Multi Mode party 4) |
+| `--max-players N` | 12 | 1–12: players on the server in total (each Internet Multi Mode lobby room still holds 12, each Multi Mode party 4) |
 | `--rate-limit N` | 120 | online: packets per second per player (bursts up to 2x; kicked after 3 s over) |
 | `--handshake-timeout S` | 5 | seconds a new connection has to send its handshake |
 | `--kill-limit N` | 10 | enemy-kill reports per second per player |
@@ -172,15 +183,17 @@ Config files:
     - each `rares[]` entry is `{id, name, chance}`.
   - `missions[]`: `id`, `name`, `meseta`, `rewards[] {id, name, weight}`.
   - The shipped values are placeholders.
-- **`client_config.toml`** (with your game files, MMO builds):
+- **`client_config.toml`** (with your game files):
   - `server_ip`: leave it out to find a LAN server;
   - `server_port` (29001);
   - `lan_discovery` (true);
   - `discovery_port` (29000);
   - `player_name`;
   - `party_finder` (true): open the party finder at the Matching Counter.
+- **`terms_of_use.txt`** (with your game files): plain UTF-8 text shown in the game's Terms of Use window when a player connects in Internet Multi Mode. Edit it to set your server's rules; the window wraps long lines on its own. Without the file a one-line placeholder is shown.
+- **`notices.txt`** (with your game files): the same, for the Notices window that follows the Terms of Use (server news).
 
-**Party finder (MMO builds).** In Multi Mode, the Matching Counter opens a panel listing the parties being hosted on the server (leader, members, free slots), plus START A PARTY and CHOOSE MYSELF. Pick a party and the client joins it for you: it presses Join Party, shows the game only that leader's party, and confirms. START A PARTY presses Form Party; Begin Party Play stays with the leader. F2 (keyboard) or L3 (controller) opens and closes the panel. In the panel:
+**Party finder.** In Multi Mode, the Matching Counter opens a panel listing the parties being hosted on the server (leader, members, free slots), plus START A PARTY and CHOOSE MYSELF. Pick a party and the client joins it for you: it presses Join Party, shows the game only that leader's party, and confirms. START A PARTY presses Form Party; Begin Party Play stays with the leader. F2 (keyboard) or L3 (controller) opens and closes the panel. In the panel:
 
 | | Keyboard | Controller |
 | --- | --- | --- |
@@ -190,7 +203,7 @@ Config files:
 
 If a step doesn't happen in time, the finder hands control back with a notice.
 
-**Lobby menu (MMO builds).** In the Multi Mode lobby, F2 / L3 opens the lobby menu instead (same keys as the party finder):
+**Lobby menu.** In the Multi Mode lobby, F2 / L3 opens the lobby menu instead (same keys as the party finder):
 
 - **Warp the party to** one of the lobby's rooms. Only the party leader can choose; the server passes the choice to every member and the whole party moves together.
 
@@ -215,11 +228,13 @@ More detail: [server/README.md](server/README.md), [port/linux/README.md](port/l
 
 ## Online roadmap (this fork)
 
+The goal is a standing reproduction of the original online services for small groups, not a larger MMO: limits stay at the original servers' 12 per lobby room and 4 per party.
+
 | Phase | Status |
 | --- | --- |
-| 1. Client networking: isolated network layer, ENet transport, MMO client entry | done |
+| 1. Client networking: isolated network layer, ENet transport, online client entry | done |
 | 2. Dedicated server: headless server, SQLite persistence, server-side loot, web admin | done |
-| 3. Break the 4-player limits | in progress: limits mapped and checked in a live party ([docs/player_limit_offsets.md](docs/player_limit_offsets.md)); party finder. Limits stay 1:1 with the original game servers: 12 players per Internet Multi Mode lobby room, 4 per Multi Mode party. Next: Internet Multi Mode through our server, with several 12-player lobby rooms for up to 32 players ([docs/psn_lobby_plan.md](docs/psn_lobby_plan.md)) |
+| 3. Break the 4-player limits | in progress: limits mapped and checked in a live party ([docs/player_limit_offsets.md](docs/player_limit_offsets.md)); party finder. Limits stay 1:1 with the original game servers: 12 players per Internet Multi Mode lobby room, 4 per Multi Mode party. Next: Internet Multi Mode through our server, with several 12-player lobby rooms ([docs/psn_lobby_plan.md](docs/psn_lobby_plan.md)) |
 | 4. Mixed frame rates and the lobby | done: 30 / 60 fps players play together ([docs/mixed_framerate_results.md](docs/mixed_framerate_results.md)); lobby warps and weapons in the lobby ([docs/area_research.md](docs/area_research.md)). Still open: smoothing other players' movement. Saves stay on the player's side (no server-side saves) |
 
 Details are in [docs/net_hle_audit.md](docs/net_hle_audit.md) and [server/README.md](server/README.md). Internet Multi Mode (12-player lobby rooms) is in progress: [docs/psn_lobby_plan.md](docs/psn_lobby_plan.md).
@@ -252,11 +267,11 @@ Current capabilities include:
 * Original 30 FPS mode
 * Infrastructure handling (Head to [psp2i discord](https://discord.gg/FeGvdBkrGa) for more info)
 * Official website loading
-* Linux and Steam Deck (Flatpak; untested so far)
+* Linux and Steam Deck (AppImage; untested so far)
 * HD texture packs in PPSSPP's format (SDL builds: macOS, Linux, Android; not the Windows Direct3D build yet)
 * PPSSPP and PSP saves load and save, encrypted as on hardware
 * **Online (this fork):**
-  * MMO client build: the game's ad hoc Multi Mode joins a server over ENet. The server is set in `client_config.toml` or found on the LAN automatically.
+  * Online play through your own server: Multi Mode (ad hoc) and Internet Multi Mode (the original PSN/SEGA services, reproduced) connect to it over ENet. The server is set in `client_config.toml` or found on the LAN automatically.
   * Dedicated server `psp2i_server`: headless, 60 Hz tick (`--tick-rate`), no runtime dependencies, about 2–4 MB of RAM.
   * LAN and online modes, handshake checks, rate limiting, and bans by IP or account.
   * Embedded SQLite database for accounts, characters and JSON inventories. Trades are crash-safe, so items can't be duplicated.

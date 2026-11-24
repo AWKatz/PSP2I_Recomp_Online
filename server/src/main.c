@@ -65,7 +65,7 @@ static void usage(void) {
          "  --bind ADDR            address to bind (default: all interfaces)\n"
          "  --lan-port N           LAN discovery port, UDP (default 29000)\n"
          "  --name NAME            server name shown to LAN clients\n"
-         "  --max-players N        1..32 (default 32: the hub cap)\n"
+         "  --max-players N        1..12 (default 12, as the original servers)\n"
          "  --rate-limit N         online: packets per second per player (default 120, burst 2x)\n"
          "  --handshake-timeout S  seconds a new connection has to send its handshake (default 5)\n"
          "  --tick-rate N          server ticks per second, 10..120 (default 60)\n"

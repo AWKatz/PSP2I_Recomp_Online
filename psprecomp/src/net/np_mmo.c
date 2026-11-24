@@ -40,6 +40,8 @@ void mmo_np_set_name(const char *name) {
     while (n < 3) g_online_id[n++] = '_';
 }
 
+const char *mmo_np_online_id(void) { return g_online_id; }
+
 static void write_np_id(uint32_t addr) {
     uint8_t id[NP_ID_LEN] = { 0 };
     memcpy(id, g_online_id, strlen(g_online_id));

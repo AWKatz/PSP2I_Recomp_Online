@@ -30,6 +30,15 @@ enum {
     MSG_S2C_PARTY_LIST    = 0x8030,   /* the party directory: every party a leader is hosting */
     MSG_C2S_PARTY_WARP    = 0x0032,   /* a leader: take my party to this area */
     MSG_S2C_PARTY_WARP    = 0x8032,   /* to the leader and every member: move to this area */
+    /* Internet Multi Mode room matching (the game's sceNpMatching2, served by us) */
+    MSG_C2S_NP2_SEARCH    = 0x0040,   /* list the rooms */
+    MSG_C2S_NP2_CREATE    = 0x0041,   /* create a room and join it */
+    MSG_C2S_NP2_JOIN      = 0x0042,   /* join a room */
+    MSG_C2S_NP2_LEAVE     = 0x0043,   /* leave my room */
+    MSG_C2S_NP2_ROOM_MSG  = 0x0044,   /* a room message to the other members (or one) */
+    MSG_S2C_NP2_REPLY     = 0x8040,   /* the answer to a request above */
+    MSG_S2C_NP2_MEMBER    = 0x8041,   /* someone joined or left my room */
+    MSG_S2C_NP2_ROOM_MSG  = 0x8042,   /* a room message from a member */
 };
 
 /* The party directory (Multi Mode). A client reports its role in the game's
@@ -53,6 +62,37 @@ enum { PSP_MMO_PARTY_ENTRY_LEN = 6 + 4 + 32, PSP_MMO_PARTY_LIST_MAX = 32,
  * session whose reported leader is that leader. */
 enum { PSP_MMO_PARTY_WARP_LEN = 8 + 12 };
 enum { PSP_MMO_WARP_OPTIONS = 1, PSP_MMO_WARP_WEAPONS = 2 };   /* flags: options are set; weapons in the lobby */
+
+/* ---- room matching (Internet Multi Mode) -----------------------------------------------
+ * Rooms hold up to 12 players, as on the original servers. A room's attributes (the
+ * game's searchable ints, searchable and external binary attributes) are an opaque
+ * blob to the server: ATTRS = int count u8, {id u16, value u32} x count, bin count u8,
+ * {id u16, kind u8 (1 searchable, 2 external), size u16, data} x count.
+ *
+ * MSG_C2S_NP2_SEARCH: hdr, request u32
+ * MSG_C2S_NP2_CREATE: hdr, request u32, max members u16, reserved u16, flags u32, attrs size u16, ATTRS
+ * MSG_C2S_NP2_JOIN:   hdr, request u32, room u64
+ * MSG_C2S_NP2_LEAVE:  hdr, request u32, room u64
+ * MSG_C2S_NP2_ROOM_MSG: hdr, room u64, to member u16 (0 = everyone else), size u16, data
+ * MSG_S2C_NP2_REPLY:  hdr, request u32, status u32 (0 = ok, else PSP_MMO_NP2_ERR_*), then
+ *     search:       count u16, {ROOM} x count
+ *     create, join: ROOM, my member id u16, then {MEMBER} x the room's member count
+ *     leave:        nothing
+ * ROOM:   room u64, max members u16, members u16, owner member id u16, owner name[20], flags u32,
+ *         attrs size u16, ATTRS
+ * MEMBER: member id u16, name[20] (NUL-padded), address u32 (IPv4, network order; 0 = unknown)
+ * MSG_S2C_NP2_MEMBER:   hdr, room u64, joined u8 (0 = left), owner member id u16, MEMBER
+ * MSG_S2C_NP2_ROOM_MSG: hdr, room u64, from member u16, size u16, data */
+enum {
+    PSP_MMO_NP2_ROOM_MAX = 12, PSP_MMO_NP2_NAME_LEN = 20, PSP_MMO_NP2_ATTRS_MAX = 1024,
+    PSP_MMO_NP2_MEMBER_LEN = 2 + PSP_MMO_NP2_NAME_LEN + 4,
+    PSP_MMO_NP2_ROOM_HDR_LEN = 8 + 2 + 2 + 2 + PSP_MMO_NP2_NAME_LEN + 4 + 2,   /* ROOM before its ATTRS */
+    PSP_MMO_NP2_MSG_MAX = 1024,
+};
+enum { PSP_MMO_NP2_OK = 0, PSP_MMO_NP2_ERR_NO_ROOM = 1, PSP_MMO_NP2_ERR_FULL = 2, PSP_MMO_NP2_ERR_BAD = 3,
+       PSP_MMO_NP2_ERR_SERVER_FULL = 4 };
+static inline void psp_mmo_put_u64(uint8_t *b, uint64_t v) { for (int i = 0; i < 8; i++) b[i] = (uint8_t)(v >> (8 * i)); }
+static inline uint64_t psp_mmo_get_u64(const uint8_t *b) { uint64_t v = 0; for (int i = 7; i >= 0; i--) v = (v << 8) | b[i]; return v; }
 
 /* MSG_S2C_SYSTEM_NOTICE: hdr, colour u32 (0xRRGGBB), text[128] (UTF-8, NUL-padded) */
 enum { PSP_MMO_NOTICE_TEXT_LEN = 128, PSP_MMO_NOTICE_LEN = 8 + 4 + PSP_MMO_NOTICE_TEXT_LEN };

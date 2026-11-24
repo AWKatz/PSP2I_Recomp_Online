@@ -1,0 +1,5 @@
+Server news
+
+Welcome to PSP2i Online, running on a community server.
+
+Edit notices.txt next to your game files to change this page.

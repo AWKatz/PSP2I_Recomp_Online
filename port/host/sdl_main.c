@@ -20,7 +20,8 @@
  * elsewhere next to the executable or in $PSP2I_DATA:
  *
  *   the game           an ISO: on Android picked on first start (remembered),
- *                      elsewhere psp2i.ini iso=<path>; or the extracted files
+ *                      elsewhere psp2i.ini iso=<path>, else the first *.iso in the folder;
+ *                      or the extracted files
  *                      in GameData/disc/ (PSP_GAME/...)
  *   GameData/flash/    the PSP fonts (on Android copied in from a folder the
  *                      user picks, once)
@@ -1039,9 +1040,27 @@ static void menu_apply(int fx) {
     if (save) write_ini();
 }
 
+#ifndef SDL_PLATFORM_ANDROID
+#include <dirent.h>
+/* No iso= in psp2i.ini: the first *.iso in the game folder (by name), as the Windows build does. */
+static void find_iso(const char *dir, char *out, size_t cap) {
+    DIR *d = opendir(dir);
+    if (!d) return;
+    char best[512] = "";
+    for (struct dirent *e; (e = readdir(d)) != NULL;) {
+        const size_t n = strlen(e->d_name);
+        if (n < 5 || e->d_name[0] == '.' || SDL_strcasecmp(e->d_name + n - 4, ".iso") != 0) continue;
+        if (!best[0] || strcmp(e->d_name, best) < 0) snprintf(best, sizeof best, "%s", e->d_name);
+    }
+    closedir(d);
+    if (best[0]) { snprintf(out, cap, "%s/%s", dir, best); fprintf(stderr, "iso: %s (found in the game folder)\n", out); }
+}
+#endif
+
 /* Where the game comes from. With GameData/disc/ in the files folder: the
  * extracted files, as on Windows. Otherwise a disc image -- on Android the
- * ISO the user picks (remembered), elsewhere psp2i.ini iso=. A decrypted
+ * ISO the user picks (remembered), elsewhere psp2i.ini iso= or the first *.iso in
+ * the game folder. A decrypted
  * EBOOT.BIN in the files folder overrides the disc's. Returns the EBOOT's
  * bytes (malloc'd) or NULL, having told the user why. */
 static uint8_t *find_game(const char *root, size_t *len) {
@@ -1060,9 +1079,10 @@ static uint8_t *find_game(const char *root, size_t *len) {
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "PSP2i", "That file is not a PSP disc image (.iso). Choose the game's ISO.", g_win);
         }
 #else
+        if (!g_iso_path[0]) find_iso(g_base, g_iso_path, sizeof g_iso_path);   /* as on Windows */
         if (!g_iso_path[0] || psp_io_open_disc_image(g_iso_path) != 0) {
-            snprintf(msg, sizeof msg, "No game found.\n\nPut iso=<path to the game's .iso> in %s/psp2i.ini, "
-                                      "or the extracted files in %s/disc/.", g_base, root);
+            snprintf(msg, sizeof msg, "No game found.\n\nPut the game's .iso in %s\n(or set iso=<path> in psp2i.ini, "
+                                      "or put the extracted files in %s/disc/).", g_base, root);
             fail(msg);
             return NULL;
         }
@@ -1096,7 +1116,12 @@ static uint8_t *find_game(const char *root, size_t *len) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "PSP2i",
             "The PSP fonts were not found (GameData/flash/font). The game's text may not show.", g_win);
 #else
-    if (!path_exists(p)) fprintf(stderr, "psp2i: no fonts in %s; the game's text may not show\n", p);
+    if (!path_exists(p)) {
+        fprintf(stderr, "psp2i: no fonts in %s; the game's text may not show\n", p);
+        snprintf(msg, sizeof msg, "The PSP fonts were not found. The game's text may not show.\n\n"
+                                  "Copy the PSP firmware fonts (*.pgf) into:\n%s", p);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "PSP2i", msg, g_win);
+    }
 #endif
     *len = n;
     return b;

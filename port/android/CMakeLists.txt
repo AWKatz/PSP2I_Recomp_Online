@@ -23,6 +23,7 @@ if(NOT SDL_DIR OR NOT EXISTS ${SDL_DIR}/CMakeLists.txt)
 endif()
 
 add_subdirectory(${SDL_DIR} SDL EXCLUDE_FROM_ALL)
+set(ENABLE_MMO_NET OFF CACHE BOOL "Android: the online client is not wired into this host yet" FORCE)
 add_subdirectory(${PSPRECOMP_DIR} psprecomp EXCLUDE_FROM_ALL)
 add_subdirectory(${PORT}/atrac_dll atrac_dll)
 

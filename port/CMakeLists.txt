@@ -64,6 +64,9 @@ if(BUILD_DEDICATED_SERVER)   # the dedicated server, next to the game
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../server ${CMAKE_BINARY_DIR}/server)
 endif()
 target_link_libraries(psp2i PRIVATE psprecomp psp2i_savecrypt)
+if(ENABLE_MMO_NET)   # psprecomp's option: the MMO client (client_config.toml next to the exe)
+    target_sources(psp2i PRIVATE host/mmo_client.c host/party_ui.c host/lobby.c host/infra.c)
+endif()
 
 if(MSVC)
     # The generated translation unit is ~200 MB of C. /bigobj for its section

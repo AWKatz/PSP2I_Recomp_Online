@@ -5,6 +5,7 @@
 #include "psprecomp/net_transport.h"
 
 int  mmo_net_ready(void);                         /* joined the server: the transport can send */
+void mmo_ctrl_send(const uint8_t *m, uint32_t len);   /* a control message to the server (if joined) */
 
 /* The party directory (adhoc_mmo.c): our role in the game's party, sent to
  * the server when it changes; the join target (steering). */
@@ -28,6 +29,12 @@ void mmo_net_poll(void);                          /* read the network now (block
 /* PSN sign-in without PSN (np_mmo.c) */
 void mmo_np_register(void);
 void mmo_np_set_name(const char *name);
+const char *mmo_np_online_id(void);              /* the player's PSN online id (from the name) */
 void mmo_np_pump(void);                           /* once a frame: ticket callbacks */
+
+/* sceNpMatching2 (np_matching2.c) */
+void mmo_matching2_register(void);
+void mmo_matching2_on_packet(const uint8_t *m, uint32_t len);   /* MSG_S2C_NP2_* */
+void mmo_matching2_pump(void);                    /* once a frame: request callbacks, events */
 
 #endif
