@@ -30,7 +30,7 @@ enum { MENU_GRAPHICS,
        MENU_MASTER_VOL, MENU_MUSIC_VOL, MENU_SFX_VOL, MENU_ATTENUATION, MENU_FONT, MENU_CONTROLS, MENU_TESTS, MENU_EXTRACT_MODELS, MENU_LOAD_MODELS, MENU_QUIT, MENU_CLOSE,
        MENU_RS_ON, MENU_RS_SPEED, MENU_DEADZONE, MENU_MOUSE_CAM, MENU_KEYS, MENU_SWAP_OC, MENU_TOUCH_COLOR, MENU_TOUCH_ALPHA, MENU_CONTROLS_BACK,
        MENU_TEST_TICKS, MENU_TEST_LOGIC, MENU_TESTS_BACK,
-       MENU_FRAME_RATE, MENU_FPS_COUNTER, MENU_RESOLUTION, MENU_RENDERER, MENU_DRAW_DIST, MENU_VERTEX_WORK,
+       MENU_FRAME_RATE, MENU_FPS_COUNTER, MENU_RESOLUTION, MENU_RENDERER, MENU_RENDER_SCALE, MENU_DRAW_DIST, MENU_VERTEX_WORK,
        MENU_SCALING, MENU_FXAA, MENU_SHARPEN, MENU_SCANLINES, MENU_BRIGHTNESS, MENU_SATURATION, MENU_GRAPHICS_BACK,
        MENU_KEY_FIRST, MENU_KEYS_RESET = MENU_KEY_FIRST + 16, MENU_KEYS_BACK,
        MENU_ITEMS };
@@ -88,6 +88,7 @@ enum {
     MFX_RS_SPEED    = 1 << 4,   /* rs_step changed: menu_rs_speed() */
     MFX_RES_CHANGED = 1 << 6,   /* res changed: resize the window / go fullscreen */
     MFX_RENDERER    = 1 << 9,   /* renderer changed: save it (used from the next start) */
+    MFX_RENDER_SCALE = 1 << 11, /* render_scale changed: save it (used from the next start) */
     MFX_AUDIO       = 1 << 10,  /* a volume or the attenuation changed: apply and save */
     MFX_FONT        = 1 << 12,  /* font changed: the caller applies it and sets font_name */
     MFX_SWAP_OC     = 1 << 13,  /* swap_oc changed: Circle and Cross exchanged (keys and controllers) */
@@ -127,6 +128,8 @@ typedef struct {
     int      res;          /* RES_*: output resolution */
     int      renderer;     /* REN_D3D11 / REN_GL: the saved choice */
     int      renderer_now; /* REN_*: the renderer running now (set by the caller) */
+    int      render_scale; /* INTERNAL RES: 1..4 times the PSP's 480x272, the saved choice */
+    int      render_scale_now; /* the scale running now (set by the caller) */
     int      vol[VOL_N];   /* 0..VOL_STEPS, tenths */
     int      att;          /* ATT_* */
     int      font;         /* the game's text font, 0..font_n-1; the caller's list (system, PSP, fonts/) */

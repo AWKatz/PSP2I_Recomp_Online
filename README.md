@@ -55,7 +55,7 @@ PSP2i_<system>/                 PSP2i_macOS, PSP2i_Linux or PSP2i_Windows
   psp2i.ini                     optional settings (see below); created when you change one in game
   client_config.toml            optional: which server to join (found on the LAN by default)
   terms_of_use.txt, notices.txt server owners: the texts shown when players connect
-  TEXTURES/NPJH50332/           optional: an HD texture pack made for PPSSPP (macOS, Linux)
+  TEXTURES/NPJH50332/           optional: an HD texture pack made for PPSSPP
   logs/                         created on first run
   server/                       the dedicated server, self-contained too
     psp2i_server                (psp2i_server.exe on Windows, the server AppImage on Linux)
@@ -88,7 +88,7 @@ resolution=1920x1080
 | `fps` | `30` (default), `60` | The game's frame rate. 60 runs the game's own timing at 60, as PPSSPP's 60 fps cheat does, so no cheat file is needed. Also in the in-game settings menu (FRAME RATE), which saves it back to `psp2i.ini`. |
 | `resolution` | `WIDTHxHEIGHT` (e.g. `1280x720`, `1920x1080`, `2560x1440`, `3840x2160`), or `native` | The window size and the internal rendering resolution: the nearest whole multiple of the PSP's 480x272, up to 8x (`1920x1080` renders at 4x, 1920x1088). `native` renders at 480x272. Without the line, it is `1920x1080` (4x). Read at startup only. |
 
-`resolution` applies to the macOS, Linux and Android builds; on Windows the window size is chosen in the settings menu (RESOLUTION, kept in `psp2i_display.ini`) and the game still renders at 480x272. HD textures only show their detail above `native`. The settings menu rewrites its own keys in `psp2i.ini` and keeps the others, including `resolution`.
+`resolution` applies to the macOS, Linux and Android builds. On Windows the window size is chosen in the settings menu (RESOLUTION), and the internal resolution under GRAPHICS > INTERNAL RES: 1x to 4x the PSP's 480x272, 4x by default, used from the next start (OpenGL only; both kept in `psp2i_display.ini`). HD textures only show their detail above `native`. The settings menu rewrites its own keys in `psp2i.ini` and keeps the others, including `resolution`.
 
 PPSSPP and PSP saves load and save encrypted, so they work in both directions. In-game, Cross confirms.
 
@@ -277,7 +277,7 @@ Current capabilities include:
 * Infrastructure handling (Head to [psp2i discord](https://discord.gg/FeGvdBkrGa) for more info)
 * Official website loading
 * Linux and Steam Deck (AppImage; untested so far)
-* HD texture packs in PPSSPP's format (SDL builds: macOS, Linux, Android; not the Windows Direct3D build yet)
+* HD texture packs in PPSSPP's format (every platform; on Windows with the OpenGL renderer)
 * PPSSPP and PSP saves load and save, encrypted as on hardware
 * **Online (this fork):**
   * Online play through your own server: Multi Mode (ad hoc) and Internet Multi Mode (the original PSN/SEGA services, reproduced) connect to it over ENet. The server is set in `client_config.toml` or found on the LAN automatically.

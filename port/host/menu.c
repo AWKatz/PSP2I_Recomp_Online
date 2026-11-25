@@ -124,6 +124,9 @@ static int change(menu_state *m, int dir) {
     case MENU_FPS_COUNTER: m->show_fps = !m->show_fps;      return MFX_SHOW_FPS;
     case MENU_LOAD_MODELS: m->load_models = !m->load_models; return MFX_LOAD_MODELS;
     case MENU_RENDERER:    m->renderer = (m->renderer + 1) % REN_MENU_CHOICES; return MFX_RENDERER;
+    case MENU_RENDER_SCALE:
+        m->render_scale = dir < 0 ? (m->render_scale <= 1 ? 4 : m->render_scale - 1) : (m->render_scale >= 4 ? 1 : m->render_scale + 1);
+        return MFX_RENDER_SCALE;
     case MENU_MASTER_VOL: case MENU_MUSIC_VOL: case MENU_SFX_VOL: {
         int *v = &m->vol[m->sel - MENU_MASTER_VOL];
         const int old = *v;
@@ -498,7 +501,7 @@ void menu_draw(const menu_state *m, menu_image *img, int game_fps, const char *h
         [MENU_TOUCH_COLOR] = "TOUCH COLOR", [MENU_TOUCH_ALPHA] = "TOUCH OPACITY", [MENU_CONTROLS_BACK] = "BACK",
         [MENU_TEST_TICKS] = "TICK PACING", [MENU_TEST_LOGIC] = "30 HZ LOGIC", [MENU_TESTS_BACK] = "BACK",
         [MENU_FRAME_RATE] = "FRAME RATE", [MENU_FPS_COUNTER] = "FPS COUNTER", [MENU_RESOLUTION] = "RESOLUTION",
-        [MENU_RENDERER] = "RENDERER", [MENU_DRAW_DIST] = "DRAW DISTANCE", [MENU_VERTEX_WORK] = "VERTEX WORK", [MENU_SCALING] = "SCALING",
+        [MENU_RENDERER] = "RENDERER", [MENU_RENDER_SCALE] = "INTERNAL RES", [MENU_DRAW_DIST] = "DRAW DISTANCE", [MENU_VERTEX_WORK] = "VERTEX WORK", [MENU_SCALING] = "SCALING",
         [MENU_FXAA] = "ANTI-ALIASING", [MENU_SHARPEN] = "SHARPEN", [MENU_SCANLINES] = "SCANLINES",
         [MENU_BRIGHTNESS] = "BRIGHTNESS", [MENU_SATURATION] = "SATURATION", [MENU_GRAPHICS_BACK] = "BACK",
         [MENU_KEY_FIRST + KB_UP] = "UP", [MENU_KEY_FIRST + KB_DOWN] = "DOWN", [MENU_KEY_FIRST + KB_LEFT] = "LEFT",
@@ -515,6 +518,8 @@ void menu_draw(const menu_state *m, menu_image *img, int game_fps, const char *h
     else snprintf(att, sizeof att, "< %d DB >", menu_att_db(m->att));
     char ren[32];                                       /* the change applies at the next start */
     snprintf(ren, sizeof ren, "< %s >%s", m->renderer == REN_GL ? "OPENGL" : "D3D11", m->renderer != m->renderer_now ? " RESTART" : "");
+    char rsc[32];                                       /* the change applies at the next start */
+    snprintf(rsc, sizeof rsc, "< %dX >%s", m->render_scale, m->render_scale != m->render_scale_now ? " RESTART" : "");
     char res[24];
     snprintf(res, sizeof res, "< %s >", menu_res_name(m->res));
     char rs[24];
@@ -555,7 +560,7 @@ void menu_draw(const menu_state *m, menu_image *img, int game_fps, const char *h
                       : i == m->key_wait ? "PRESS A KEY..."
                       : is_binding(i) ? (m->key_name[i - MENU_KEY_FIRST][0] ? m->key_name[i - MENU_KEY_FIRST] : "NONE")
                       : i == MENU_RS_SPEED ? rs
-                      : i == MENU_RESOLUTION ? res : i == MENU_RENDERER ? ren
+                      : i == MENU_RESOLUTION ? res : i == MENU_RENDERER ? ren : i == MENU_RENDER_SCALE ? rsc
                       : i >= MENU_MASTER_VOL && i <= MENU_SFX_VOL ? vol[i - MENU_MASTER_VOL]
                       : i == MENU_ATTENUATION ? att : i == MENU_FONT ? font
                       : i == MENU_SWAP_OC ? (m->swap_oc ? "< SWAPPED >" : "< NORMAL >")

@@ -154,6 +154,7 @@ int  d3d11_present(uint32_t addr, uint32_t stride, int fmt, uint32_t *out, int w
 #endif
 #include "gl_ge.h"
 #include "modelx.h"
+#include "texpack.h"
 static void exe_dir(char *out, size_t cap);
 
 /* The renderer (menu RENDERER, psp2i_display.ini renderer=, --renderer):
@@ -859,6 +860,61 @@ static int window_show(void) {
     return present_active() ? present_frame(g_rgba, SCREEN_W, SCREEN_H) : -1;
 }
 
+/* OpenGL above 1x (INTERNAL RES): the game's frame goes from its render target
+ * straight into the window at full resolution, as on the SDL hosts, with the
+ * FPS counter and the settings menu drawn over it as small images. Reading the
+ * frame back to 480x272 (window_show) would throw the extra detail away. The
+ * GE thread keeps the 1x path for now. */
+static int hd_direct(void) {
+    return g_renderer == REN_GL && g_gl_window && !psp_ge_threaded() && gl_ge_render_scale() > 1;
+}
+
+static void hd_overlay_box(const uint32_t *px, int bx, int by, int bw, int bh, int x, int y, int w, int h, int cw, int ch) {
+    static uint32_t box[SCREEN_W * SCREEN_H];
+    if (bx < 0) { bw += bx; bx = 0; }
+    if (by < 0) { bh += by; by = 0; }
+    if (bx + bw > SCREEN_W) bw = SCREEN_W - bx;
+    if (by + bh > SCREEN_H) bh = SCREEN_H - by;
+    if (bw <= 0 || bh <= 0) return;
+    for (int j = 0; j < bh; j++) memcpy(box + j * bw, px + (by + j) * SCREEN_W + bx, (size_t)bw * 4);
+    gl_draw_overlay(box, bw, bh, x + bx * w / SCREEN_W, y + by * h / SCREEN_H, bw * w / SCREEN_W, bh * h / SCREEN_H, cw, ch);
+}
+
+static int window_show_hd(void) {
+    RECT rc;
+    GetClientRect(g_wnd, &rc);
+    if (rc.right <= 0 || rc.bottom <= 0) return 0;          /* minimised */
+    const int cw = rc.right, ch = rc.bottom;
+    int x, y, w, h;
+    present_fit(cw, ch, SCREEN_W, SCREEN_H, &x, &y, &w, &h);
+    uint32_t addr, stride, fmt;
+    psp_display_get(&addr, &stride, &fmt);
+    if (!(addr && gl_ge_present_direct(addr, stride, (int)fmt, SCREEN_W, SCREEN_H, x, y, w, h, cw, ch))) {
+        /* the CPU's copy of VRAM is the current one (movies, some screens): at 1x, overlay included */
+        if (addr) grab_frame();
+        compose();
+        if (gl_blit_frame(g_rgba, SCREEN_W, SCREEN_H, x, y, w, h, cw, ch) != 0) return -1;
+        gl_platform_swap();
+        return 0;
+    }
+    static uint32_t px[SCREEN_W * SCREEN_H];
+    menu_image img = { px, SCREEN_W, SCREEN_H };
+    if (g_menu.show_fps) {
+        for (int i = 0; i < SCREEN_W * 20; i++) px[i] = 0xFF000000u;
+        fps_draw(&g_fpsm, &img);
+        hd_overlay_box(px, 2, 2, menu_text_width("ACTUAL 000.0 FPS") + 5, 12, x, y, w, h, cw, ch);
+    }
+    if (g_menu.open) {
+        for (int i = 0; i < SCREEN_W * SCREEN_H; i++) px[i] = 0xFF000000u;
+        menu_draw(&g_menu, &img, framerate_game_fps(), g_menu_key_name);
+        int bx, by, bw, bh;
+        menu_box(&g_menu, SCREEN_W, SCREEN_H, &bx, &by, &bw, &bh);
+        hd_overlay_box(px, bx, by, bw, bh, x, y, w, h, cw, ch);
+    }
+    gl_platform_swap();
+    return 0;
+}
+
 static void window_pump(void) {
     MSG m;   /* the game thread's own windows: the web page, SDL's */
     while (PeekMessageA(&m, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&m); DispatchMessageA(&m); }
@@ -1135,6 +1191,7 @@ static int  g_last_windowed = RES_DEFAULT;  /* where Alt+Enter returns from full
 
 static int g_res_saved = RES_DEFAULT;       /* what psp2i_display.ini holds */
 static int g_ren_saved = REN_GL;     /* OpenGL by default; Direct3D 11 is the fallback */
+static int g_rscale_saved = 4;    /* INTERNAL RES (render_scale=1..4): OpenGL draws at this many times 480x272 */
 static int g_vol_saved[VOL_N] = { VOL_STEPS, VOL_STEPS, VOL_STEPS };
 static int g_att_saved = ATT_DEFAULT;
 static int g_openh264 = 1;                  /* fetch Cisco's OpenH264 for movies (h264_openh264.c) */
@@ -1154,6 +1211,7 @@ static int display_load(void) {
     while (fgets(line, sizeof line, f)) {
         if (!strncmp(line, "resolution=", 11)) res = menu_res_parse(line + 11);
         else if (!strncmp(line, "renderer=", 9)) { const int r = menu_ren_parse(line + 9); if (r >= 0) g_ren_saved = r; }
+        else if (!strncmp(line, "render_scale=", 13)) { const int s = atoi(line + 13); if (s >= 1 && s <= 4) g_rscale_saved = s; }
         else if (!strncmp(line, "master_volume=", 14)) g_vol_saved[VOL_MASTER] = vol_parse(line + 14);
         else if (!strncmp(line, "music_volume=", 13))  g_vol_saved[VOL_MUSIC] = vol_parse(line + 13);
         else if (!strncmp(line, "sfx_volume=", 11))    g_vol_saved[VOL_SFX] = vol_parse(line + 11);
@@ -1202,6 +1260,8 @@ static void display_save(int res) {
     fprintf(f, "resolution=%s\n", menu_res_name(res));
     fprintf(f, "; renderer: d3d11 or opengl (used from the next start)\n");
     fprintf(f, "renderer=%s\n", menu_ren_key(g_ren_saved));
+    fprintf(f, "; render_scale: OpenGL's internal resolution, 1..4 times the PSP's 480x272 (used from the next start)\n");
+    fprintf(f, "render_scale=%d\n", g_rscale_saved);
     fprintf(f, "; volumes 0..100 (%%); attenuation while other programs play sound: off, -6db, -12db, -20db\n");
     fprintf(f, "master_volume=%d\nmusic_volume=%d\nsfx_volume=%d\n",
             g_vol_saved[VOL_MASTER] * 10, g_vol_saved[VOL_MUSIC] * 10, g_vol_saved[VOL_SFX] * 10);
@@ -1312,6 +1372,11 @@ static void menu_step(void) {
         g_ren_saved = g_menu.renderer;
         if (!g_headless) display_save(g_res_saved);
         fprintf(stderr, "menu: renderer %s (saved; used from the next start)\n", menu_ren_key(g_menu.renderer));
+    }
+    if (fx & MFX_RENDER_SCALE) {
+        g_rscale_saved = g_menu.render_scale;
+        if (!g_headless) display_save(g_res_saved);
+        fprintf(stderr, "menu: internal resolution %dx (saved; used from the next start)\n", g_rscale_saved);
     }
     if (fx & MFX_SWAP_OC) {
         g_swap_oc = g_menu.swap_oc;
@@ -1699,7 +1764,10 @@ static void on_vblank(void) {
         uint32_t addr, stride, fmt;
         psp_display_get(&addr, &stride, &fmt);
 #ifdef _WIN32
-        const int p = addr ? gpu_present(addr, stride, (int)fmt, g_frame, SCREEN_W, SCREEN_H) : 0;
+        static uint64_t hd_flip = (uint64_t)-1;
+        const int hd = !g_headless && hd_direct();
+        if (hd) { const uint64_t fl = psp_display_flips(); have_frame = fl != hd_flip; hd_flip = fl; }
+        const int p = addr && !hd ? gpu_present(addr, stride, (int)fmt, g_frame, SCREEN_W, SCREEN_H) : -1;
         if (p == 1) have_frame = 1;
         if (p == 1 && getenv("PSP2I_PRESENT_VERIFY")) {
             /* The asynchronous picture against VRAM made current (the access
@@ -1725,7 +1793,10 @@ static void on_vblank(void) {
 #endif
     }
 #ifdef _WIN32
-    if (!g_headless) {
+    if (!g_headless && hd_direct()) {
+        /* full resolution: a new game frame, or every 4th vblank for the overlay and CPU-drawn screens */
+        if (have_frame || (vb & 3) == 0) window_show_hd();
+    } else if (!g_headless) {
         if (have_frame) g_have_frame = 1;
         if (g_have_frame) {
             /* Shown again only when the composed picture changed (a new game
@@ -2765,6 +2836,7 @@ int main(int argc, char **argv) {
     g_renderer = renderer ? menu_ren_parse(renderer) : g_ren_saved;
     if (renderer && !strcmp(renderer, "software")) g_renderer = REN_SOFTWARE;
     if (g_renderer < 0) { fprintf(stderr, "psp2i: unknown renderer '%s'; using opengl\n", renderer); g_renderer = REN_GL; }
+    if (g_renderer == REN_GL) gl_ge_set_render_scale(g_rscale_saved);
     if (g_renderer == REN_GL && (gl_platform_init() != 0 || gl_ge_init() != 0)) {
         fprintf(stderr, "psp2i: OpenGL unavailable; falling back to Direct3D 11\n");
         g_renderer = REN_D3D11;
@@ -2803,6 +2875,8 @@ int main(int argc, char **argv) {
     g_menu.res = res;
     g_menu.renderer = g_ren_saved;
     g_menu.renderer_now = g_renderer;
+    g_menu.render_scale = g_rscale_saved;
+    g_menu.render_scale_now = g_renderer == REN_GL ? gl_ge_render_scale() : 1;
     for (int k = 0; k < VOL_N; k++) g_menu.vol[k] = g_vol_saved[k];
     g_menu.att = g_att_saved;
     g_menu.swap_oc = g_swap_oc;
@@ -2869,6 +2943,13 @@ int main(int argc, char **argv) {
         modelx_start(xd, g_load_models);  /* LOAD MODELS: Data/ models in place of the game's */
         g_menu.load_models = g_load_models;
         if (g_renderer == REN_GL) gl_ge_set_texture_source(modelx_texture, modelx_texture_gen);
+    }
+    if (g_renderer == REN_GL) {           /* HD textures: a PPSSPP pack in TEXTURES/NPJH50332, as on macOS */
+        char td[1200];
+        const char *env = getenv("PSP2I_TEXTURES");
+        if (env && *env) snprintf(td, sizeof td, "%s", env);
+        else snprintf(td, sizeof td, "%s/TEXTURES/NPJH50332", dir);
+        if (texpack_init(td) == 0) gl_ge_set_texture_pack(texpack_lookup);
     }
     functrace_init(dir);
 #ifndef PSP2I_PROD

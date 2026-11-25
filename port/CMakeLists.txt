@@ -54,11 +54,13 @@ add_executable(psp2i
     host/rateaudit.c
     host/prod.c
     host/font_win.c
+    host/texpack.c
     ${PSPRECOMP_DIR}/tools/allegrexrecomp/decode.c
     ${PSP2I_GEN_DIR}/recomp_funcs.c
     ${PSP2I_GEN_DIR}/recomp_imports.c
 )
-target_include_directories(psp2i PRIVATE ${PSP2I_GEN_DIR} ${PSPRECOMP_DIR}/tools/allegrexrecomp)
+target_include_directories(psp2i PRIVATE ${PSP2I_GEN_DIR} ${PSPRECOMP_DIR}/tools/allegrexrecomp
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xxhash ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
 include(${CMAKE_CURRENT_SOURCE_DIR}/savecrypt.cmake)
 if(BUILD_DEDICATED_SERVER)   # the dedicated server, next to the game
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../server ${CMAKE_BINARY_DIR}/server)
