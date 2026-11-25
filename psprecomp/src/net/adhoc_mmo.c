@@ -369,18 +369,26 @@ static void on_packet(const psp_net_packet *p, void *user) {
     }
 }
 
-void mmo_net_poll(void) {
-    if (!g_joined) return;
+/* The transport lost the server: forget the session, so the game's next way in
+ * (sceNpMatching2CreateContext, sceNetAdhocctlInit) connects and handshakes again. */
+static void poll_server(void) {
     const psp_net_transport *t = psp_net_get_transport();
-    t->poll_packets(t->ctx, on_packet, NULL);
+    const int rc = t->poll_packets(t->ctx, on_packet, NULL);
+    if (rc == PSP_NET_ERR_NO_PEER || rc == PSP_NET_ERR_NOT_INIT) {
+        psp_net_log("mmo: connection to %s lost; the next connect starts a new session", g_server);
+        g_joined = 0;
+        g_session = 0;
+        mmo_matching2_reset();
+    }
+}
+
+void mmo_net_poll(void) {
+    if (g_joined) poll_server();
 }
 
 void psp_net_mmo_pump(void) {
     if (g_nevents) deliver_events();
-    if (g_joined) {
-        const psp_net_transport *t = psp_net_get_transport();
-        t->poll_packets(t->ctx, on_packet, NULL);
-    }
+    if (g_joined) poll_server();
     mmo_matching_pump();
     mmo_np_pump();
     mmo_matching2_pump();

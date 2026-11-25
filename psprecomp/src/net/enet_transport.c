@@ -38,6 +38,7 @@ struct psp_net_enet {
     slot      slots[MAX_PEERS_CAP];   /* host: clients; client: [0] = the host */
     int       max_slots;
     uint32_t  disc_reason;    /* client: why the host disconnected us */
+    int       lost;           /* client: the host is gone; the next poll tears the connection down */
     uint8_t   buf[DATA_HDR + PSP_NET_MAX_PAYLOAD];
 };
 
@@ -121,7 +122,14 @@ static int handle_event(psp_net_enet *e, ENetEvent *ev, psp_net_packet_fn fn, vo
 static int t_join_session(void *ctx, const char *address, const char *group) {
     psp_net_enet *e = ctx;
     if (!e->inited) return PSP_NET_ERR_NOT_INIT;
-    if (e->host || !address) return PSP_NET_ERR;
+    if (!address) return PSP_NET_ERR;
+    if (e->host && !e->is_host) {                         /* a connection that went dead: start over */
+        enet_host_destroy(e->host);
+        e->host = NULL;
+        memset(e->slots, 0, sizeof e->slots);
+    }
+    if (e->host) return PSP_NET_ERR;
+    e->lost = 0;
     char hostname[256];
     const char *colon = strrchr(address, ':');
     if (!colon || (size_t)(colon - address) >= sizeof hostname) return PSP_NET_ERR;
@@ -220,6 +228,7 @@ static int handle_event(psp_net_enet *e, ENetEvent *ev, psp_net_packet_fn fn, vo
                 if (s->welcomed && e->cfg.on_peer) e->cfg.on_peer(e->cfg.host_user, s->id, s->mac, 0);
             } else {
                 e->disc_reason = ev->data;
+                e->lost = 1;
                 elog(e, "enet: disconnected by the host (reason %u)", (unsigned)ev->data);
             }
             memset(s, 0, sizeof *s);
@@ -294,6 +303,13 @@ static int t_poll_packets(void *ctx, psp_net_packet_fn fn, void *user) {
     int count = 0;
     ENetEvent ev;
     while (enet_host_service(e->host, &ev, 0) > 0) count += handle_event(e, &ev, fn, user);
+    if (!e->is_host && e->lost) {                         /* the host dropped us (or timed out) */
+        enet_host_destroy(e->host);
+        e->host = NULL;
+        memset(e->slots, 0, sizeof e->slots);
+        e->lost = 0;
+        return PSP_NET_ERR_NO_PEER;
+    }
     return count;
 }
 

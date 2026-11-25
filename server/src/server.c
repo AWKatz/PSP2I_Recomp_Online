@@ -153,18 +153,35 @@ static void send_events(srv *s, uint64_t id) {
     t->send_packet(t->ctx, &to, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, m, sizeof m);
 }
 
+static void kick(srv *s, session *ss, uint32_t reason);
+
 static void on_handshake(srv *s, session *ss, const psp_net_packet *p) {
     char name[PSP_MMO_NAME_LEN + 1];
     uint8_t mac[6];
     uint32_t st = srv_check_handshake(p->data, p->len, name, mac);
-    if (st == PSP_MMO_OK) {
-        for (int i = 0; i < MAX_SESSIONS; i++)
-            if (s->sess[i].state == SS_ACTIVE && !memcmp(s->sess[i].mac, mac, 6)) { st = PSP_MMO_ERR_DUPLICATE; break; }
-    }
-    if (st == PSP_MMO_OK && count(s, SS_ACTIVE) >= s->cfg.max_players) st = PSP_MMO_ERR_FULL;
     char addr[64] = "?", ip[64] = "", why[128] = "";
     psp_net_enet_peer_address(s->enet, ss->id, addr, sizeof addr);
     srv_find_ip(s, ss->id, ip, sizeof ip);
+    if (st == PSP_MMO_OK) {
+        /* The same MAC already has a session. From the same address it is this
+         * player coming back after a drop the server has not noticed yet (ENet
+         * takes up to ~30 s to time a dead peer out): the old session goes and
+         * the new one takes its place. From another address it is refused. */
+        for (int i = 0; i < MAX_SESSIONS; i++) {
+            session *old = &s->sess[i];
+            if (old == ss || old->state != SS_ACTIVE || memcmp(old->mac, mac, 6)) continue;
+            char oip[64] = "";
+            if (srv_find_ip(s, old->id, oip, sizeof oip) == 0 && !strcmp(oip, ip)) {
+                slog(s, "player '%s' reconnected from %s: replacing stale session %llu", name, addr,
+                     (unsigned long long)old->id);
+                kick(s, old, PSP_MMO_DISC_KICKED);
+            } else {
+                st = PSP_MMO_ERR_DUPLICATE;
+            }
+            break;
+        }
+    }
+    if (st == PSP_MMO_OK && count(s, SS_ACTIVE) >= s->cfg.max_players) st = PSP_MMO_ERR_FULL;
     if (st == PSP_MMO_OK && s->cfg.database && db_ip_banned(s->cfg.database, ip, why, sizeof why)) {
         send_ack(s, ss->id, PSP_MMO_ERR_BANNED);
         ss->kick = PSP_MMO_DISC_BANNED;

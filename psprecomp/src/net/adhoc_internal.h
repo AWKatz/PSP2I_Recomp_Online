@@ -35,6 +35,7 @@ void mmo_np_pump(void);                           /* once a frame: ticket callba
 /* sceNpMatching2 (np_matching2.c) */
 void mmo_matching2_register(void);
 void mmo_matching2_on_packet(const uint8_t *m, uint32_t len);   /* MSG_S2C_NP2_* */
+void mmo_matching2_reset(void);                   /* the server connection was lost */
 void mmo_matching2_pump(void);                    /* once a frame: request callbacks, events */
 
 #endif

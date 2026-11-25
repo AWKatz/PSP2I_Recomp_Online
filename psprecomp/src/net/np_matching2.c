@@ -672,3 +672,12 @@ void mmo_matching2_pump(void) {
     if (g_nsig) deliver_signaling();
     if (g_npost) deliver_room();
 }
+
+/* The server connection was lost: the room, the requests waiting on the server and the
+ * events not yet delivered belong to the old session. A new session starts empty. */
+void mmo_matching2_reset(void) {
+    memset(&g_room, 0, sizeof g_room);
+    memset(g_pend, 0, sizeof g_pend);
+    g_npost = 0;
+    g_nsig = 0;
+}
