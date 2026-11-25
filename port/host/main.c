@@ -435,6 +435,7 @@ static float g_rs_saved;                    /* menu CONTROLS > SENSITIVITY (rs_s
 static int g_rs_on = 1;                     /* menu CONTROLS > RIGHT STICK (right_stick=on/off) */
 static int g_deadzone_pct;                  /* menu CONTROLS > STICK DEADZONE (stick_deadzone=, 0 = the game's own) */
 static int g_mouse_cam;                     /* menu CONTROLS > MOUSE CAMERA (mouse_camera=on/off) */
+static int g_fps_saved;                     /* psp2i_display.ini fps= (0: none saved) */
 static int g_test_ticks, g_test_logic;      /* menu TESTS (test_tick_pacing= / test_30hz_logic=; framerate.c) */
 static int g_draw_dist;                     /* menu DRAW DISTANCE (draw_distance=far/normal; switches.txt 0) */
 static int g_vertex_arg = -1;               /* --vertex-work gpu|cpu (tests): over the ini */
@@ -1210,6 +1211,7 @@ static int display_load(void) {
     int res = -1;
     while (fgets(line, sizeof line, f)) {
         if (!strncmp(line, "resolution=", 11)) res = menu_res_parse(line + 11);
+        else if (!strncmp(line, "fps=", 4)) { const int v = atoi(line + 4); if (v == 30 || v == 60 || v == 120) g_fps_saved = v; }
         else if (!strncmp(line, "renderer=", 9)) { const int r = menu_ren_parse(line + 9); if (r >= 0) g_ren_saved = r; }
         else if (!strncmp(line, "render_scale=", 13)) { const int s = atoi(line + 13); if (s >= 1 && s <= 4) g_rscale_saved = s; }
         else if (!strncmp(line, "master_volume=", 14)) g_vol_saved[VOL_MASTER] = vol_parse(line + 14);
@@ -1258,6 +1260,8 @@ static void display_save(int res) {
     if (!f) { fprintf(stderr, "display: cannot write %s\n", g_display_ini); return; }
     fprintf(f, "; psp2i display settings (the settings menu changes this)\n");
     fprintf(f, "resolution=%s\n", menu_res_name(res));
+    fprintf(f, "; frame rate: 30, 60 or 120 (--fps overrides it for one run)\n");
+    fprintf(f, "fps=%d\n", g_fps_saved ? g_fps_saved : 30);
     fprintf(f, "; renderer: d3d11 or opengl (used from the next start)\n");
     fprintf(f, "renderer=%s\n", menu_ren_key(g_ren_saved));
     fprintf(f, "; render_scale: OpenGL's internal resolution, 1..4 times the PSP's 480x272 (used from the next start)\n");
@@ -1358,6 +1362,8 @@ static void menu_step(void) {
         framerate_set(g_menu.fps);
         rec_fps(g_menu.fps);
         fprintf(stderr, "menu: frame rate %d fps\n", g_menu.fps);
+        g_fps_saved = g_menu.fps;
+        if (!g_headless) display_save(g_res_saved);
     }
     if (fx & MFX_RES_CHANGED) display_set(g_menu.res);
     if (fx & MFX_AUDIO) {
@@ -2827,6 +2833,7 @@ int main(int argc, char **argv) {
 
     snprintf(g_display_ini, sizeof g_display_ini, "%s/psp2i_display.ini", dir);
     int res = display_load();
+    if (!fps_arg && g_fps_saved) fps = g_fps_saved;       /* the menu's last choice, unless --fps */
     if (res_arg >= 0) res = res_arg;
     if (res < 0) res = RES_DEFAULT;
     if (res != RES_FULLSCREEN) g_last_windowed = res;
