@@ -255,7 +255,15 @@ static void hle_Socket(void) {
         return;
     }
     set_host_nonblocking(s);
-    if (htype == SOCK_DGRAM) { const int one = 1; setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&one, sizeof one); }
+    if (htype == SOCK_DGRAM) {
+        /* The PSP lets several UDP sockets bind one port (the game's lobby opens two on 3658).
+         * SO_REUSEADDR allows that on Windows; macOS and Linux also need SO_REUSEPORT. */
+        const int one = 1;
+        setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&one, sizeof one);
+#ifdef SO_REUSEPORT
+        setsockopt(s, SOL_SOCKET, SO_REUSEPORT, (const char *)&one, sizeof one);
+#endif
+    }
     memset(&g_fd[fd], 0, sizeof g_fd[fd]);
     g_fd[fd].used = 1;
     g_fd[fd].s = s;
