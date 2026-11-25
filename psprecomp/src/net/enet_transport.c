@@ -130,6 +130,7 @@ static int t_join_session(void *ctx, const char *address, const char *group) {
     }
     if (e->host) return PSP_NET_ERR;
     e->lost = 0;
+    e->disc_reason = 0;                                   /* a new connection: no reason yet */
     char hostname[256];
     const char *colon = strrchr(address, ':');
     if (!colon || (size_t)(colon - address) >= sizeof hostname) return PSP_NET_ERR;

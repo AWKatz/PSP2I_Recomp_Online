@@ -275,10 +275,26 @@ int main(void) {
     cl_party_list(&b);
     CHECK(b.party_count == 0);
 
-    CHECK(cl_join(&c, port, 0xC));                  /* same MAC as Ann */
-    cl_handshake(&c, 0xA, "Dup");
-    CHECK(c.acked && c.status == PSP_MMO_ERR_DUPLICATE);
-    CHECK(cl_wait_disc(&c, 1000) == PSP_MMO_DISC_HANDSHAKE);
+    /* Ann's link dies without the server noticing and she comes back from the same
+     * address on a new connection: the new session replaces the stale one. */
+    CHECK(cl_join(&c, port, 0xC));
+    cl_handshake(&c, 0xA, "Ann");
+    CHECK(c.acked && c.status == PSP_MMO_OK);
+    CHECK(cl_wait_disc(&a, 1000) == PSP_MMO_DISC_KICKED);
+    /* The dropped client's transport has let the dead connection go: the same
+     * transport joins again, and that session replaces the one before it. */
+    {
+        const psp_net_transport *t = psp_net_enet_transport(a.e);
+        CHECK(t->poll_packets(t->ctx, cl_rx, &a) == PSP_NET_ERR_NOT_INIT);
+        char addr[32];
+        snprintf(addr, sizeof addr, "127.0.0.1:%u", port);
+        CHECK(t->join_session(t->ctx, addr, "PSP2I") == PSP_NET_OK);
+        CHECK(psp_net_enet_disconnect_reason(a.e) == 0);
+        a.acked = 0;
+        cl_handshake(&a, 0xA, "Ann");
+        CHECK(a.acked && a.status == PSP_MMO_OK);
+        CHECK(cl_wait_disc(&c, 1000) == PSP_MMO_DISC_KICKED);
+    }
     cl_free(&c);
 
     CHECK(cl_join(&c, port, 0xC));
@@ -293,7 +309,7 @@ int main(void) {
 
     srv_stats st;
     srv_halt(&lt, &st);
-    CHECK(st.players == 2 && st.handshakes_ok == 2 && st.handshakes_rejected == 2 && st.kicked_timeout == 1);
+    CHECK(st.players == 2 && st.handshakes_ok == 4 && st.handshakes_rejected == 1 && st.kicked_timeout == 1);
     CHECK(st.lan_replies >= 2);   /* a probe goes to the broadcast address and to loopback */
     srv_stop(lt.s);                                   /* tells the players */
     CHECK(cl_wait_disc(&a, 1000) == PSP_MMO_DISC_SHUTDOWN);
