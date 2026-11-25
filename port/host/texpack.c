@@ -28,6 +28,7 @@
 #ifdef _WIN32
 #  include <direct.h>
 #  define mkdir_(p) _mkdir(p)
+#  define strcasecmp _stricmp
 #else
 #  define mkdir_(p) mkdir(p, 0755)
 #endif
