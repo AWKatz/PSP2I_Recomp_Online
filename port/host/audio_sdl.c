@@ -39,6 +39,8 @@
 #define AUDIO_RATE      44100
 #define AUDIO_CHANNELS  8
 #define AUDIO_MAX_QUEUE (AUDIO_RATE / 5 * 4)       /* 200 ms of stereo s16, in bytes */
+#define AUDIO_LOW       (AUDIO_RATE / 100 * 4)     /* 10 ms: about to run dry */
+#define AUDIO_CUSHION   (AUDIO_RATE / 20 * 4)      /* 50 ms kept ahead of the device */
 
 static FILE    *g_wav;
 static uint32_t g_wav_bytes;
@@ -136,7 +138,22 @@ static void sdl_put(int ch, const int16_t *pcm, uint32_t frames) {
         }
         A.ResumeAudioStreamDevice(g_stream[ch]);
     }
-    if (A.GetAudioStreamQueued(g_stream[ch]) > AUDIO_MAX_QUEUE) A.ClearAudioStream(g_stream[ch]);
+    /* Keep a cushion: a frame that comes late (the game slowed for a moment)
+     * would otherwise empty the device and click. When the queue runs low,
+     * silence tops it up to AUDIO_CUSHION first; when it runs long (the game
+     * ahead of the device), this block is dropped rather than the whole queue,
+     * which used to cut out 200 ms at a time. */
+    const int queued = A.GetAudioStreamQueued(g_stream[ch]);
+    if (queued > AUDIO_MAX_QUEUE) return;
+    if (queued < AUDIO_LOW) {
+        static const int16_t zero[1024 * 2];
+        for (int need = AUDIO_CUSHION - queued; need > 0; ) {
+            const int n = need < (int)sizeof zero ? need & ~3 : (int)sizeof zero;
+            if (n <= 0) break;
+            A.PutAudioStreamData(g_stream[ch], zero, n);
+            need -= n;
+        }
+    }
     if (g_gain == 1.0f && g_master == 1.0f && !(g_duck < 1.0f && duck_others_heard_within(HOLD_MS))) {
         A.PutAudioStreamData(g_stream[ch], pcm, (int)(frames * 4));   /* full level: as the game made it */
         return;
