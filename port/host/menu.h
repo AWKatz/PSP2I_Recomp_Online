@@ -56,7 +56,7 @@ int  menu_touch_color_parse(const char *s);      /* name (any case) -> TOUCH_*, 
 enum { VOL_MASTER, VOL_MUSIC, VOL_SFX, VOL_N };
 #define VOL_STEPS 10
 enum { ATT_OFF, ATT_6DB, ATT_12DB, ATT_20DB, ATT_MODES };
-#define ATT_DEFAULT ATT_12DB
+#define ATT_DEFAULT ATT_OFF       /* opt-in: on, the game dips whenever another program makes a sound */
 int  menu_att_db(int mode);                          /* 0, -6, -12, -20 */
 int  menu_att_parse(int db);                         /* dB -> ATT_* (nearest; 0 = off) */
 
