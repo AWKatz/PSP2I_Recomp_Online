@@ -80,6 +80,7 @@ static struct {
     hsock s;
     uint64_t rcvtimeo_us, sndtimeo_us;   /* 0 = no timeout */
     uint32_t sends, recvs;
+    uint32_t send_errs, recv_errs;       /* failures logged so far (the first few only) */
 } g_fd[MAX_FD];
 
 static uint32_t g_errno;
@@ -260,6 +261,15 @@ static void hle_Socket(void) {
          * SO_REUSEADDR allows that on Windows; macOS and Linux also need SO_REUSEPORT. */
         const int one = 1;
         setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&one, sizeof one);
+#ifdef _WIN32
+        /* Windows reports an ICMP "port unreachable" for an earlier datagram as WSAECONNRESET
+         * on the next receive, as if the socket had a connection that broke. A PSP (and
+         * macOS/Linux) never does; the game would take it for the link going down. */
+        {
+            DWORD off = FALSE, ret = 0;
+            WSAIoctl(s, _WSAIOW(IOC_VENDOR, 12) /* SIO_UDP_CONNRESET */, &off, sizeof off, NULL, 0, &ret, NULL, NULL);
+        }
+#endif
 #ifdef SO_REUSEPORT
         setsockopt(s, SOL_SOCKET, SO_REUSEPORT, (const char *)&one, sizeof one);
 #endif
@@ -435,7 +445,15 @@ static uint32_t do_send(uint32_t fd, uint32_t buf, uint32_t len, uint32_t flags,
                          : send(g_fd[fd].s, (const char *)tmp, (int)len, host_flags(flags));
         if (n >= 0) { log_data(fd, "sent", tmp, n); r = ok((uint32_t)n); g_fd[fd].sends++; break; }
         const int e = last_error();
-        if (!would_block(e) || nb) { r = fail(map_err(e)); break; }
+        if (!would_block(e) || nb) {
+            if (!would_block(e) && g_fd[fd].send_errs++ < 20) {
+                char t[32];
+                psp_net_log_line("socket %u: send of %u bytes%s%s failed (host error %d)", fd, len, to ? " to " : "",
+                                 to ? addr_text(to, t, sizeof t) : "", e);
+            }
+            r = fail(map_err(e));
+            break;
+        }
         if (end && psp_sched_now_us() >= end) { r = fail(P_EAGAIN); break; }
         if (wait_sock(fd, 1, 1000) < 0) { r = fail(P_EINTR); break; }
     }
@@ -475,6 +493,8 @@ static uint32_t do_recv(uint32_t fd, uint32_t buf, uint32_t len, uint32_t flags,
             break;
         }
 #endif
+        if (!would_block(e) && g_fd[fd].recv_errs++ < 20)
+            psp_net_log_line("socket %u: receive failed (host error %d)", fd, e);
         if (!would_block(e) || nb) { r = fail(map_err(e)); break; }
         const int w = wait_sock(fd, 0, timeout);
         if (w < 0) { r = fail(P_EINTR); break; }
