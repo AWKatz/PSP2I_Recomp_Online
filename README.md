@@ -86,7 +86,7 @@ resolution=1920x1080
 | Setting | Values | What it does |
 | --- | --- | --- |
 | `fps` | `30` (default), `60` | The game's frame rate. 60 runs the game's own timing at 60, as PPSSPP's 60 fps cheat does, so no cheat file is needed. Also in the in-game settings menu (FRAME RATE), which saves it back to `psp2i.ini`. |
-| `resolution` | `WIDTHxHEIGHT` (e.g. `1280x720`, `1920x1080`, `2560x1440`, `3840x2160`), or `native` | The window size and the internal rendering resolution: the nearest whole multiple of the PSP's 480x272, up to 8x (`1920x1080` renders at 4x, 1920x1088). `native` renders at 480x272. Without the line, the game renders at 480x272 in a 960x544 window. Read at startup only. |
+| `resolution` | `WIDTHxHEIGHT` (e.g. `1280x720`, `1920x1080`, `2560x1440`, `3840x2160`), or `native` | The window size and the internal rendering resolution: the nearest whole multiple of the PSP's 480x272, up to 8x (`1920x1080` renders at 4x, 1920x1088). `native` renders at 480x272. Without the line, it is `1920x1080` (4x). Read at startup only. |
 
 `resolution` applies to the macOS, Linux and Android builds; on Windows the window size is chosen in the settings menu (RESOLUTION, kept in `psp2i_display.ini`) and the game still renders at 480x272. HD textures only show their detail above `native`. The settings menu rewrites its own keys in `psp2i.ini` and keeps the others, including `resolution`.
 

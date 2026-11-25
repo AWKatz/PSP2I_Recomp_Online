@@ -878,8 +878,8 @@ static int pct_step(const char *s) {
 
 /* psp2i.ini resolution=WxH (e.g. 1920x1080) or native: the window's size and
  * the internal resolution -- the nearest whole multiple of the PSP's 480x272
- * (1920x1080 -> 4x, 1920x1088). */
-static int g_res_w, g_res_h, g_res_scale = 1;
+ * (1920x1080 -> 4x, 1920x1088). Without the line: 1920x1080. */
+static int g_res_w = 1920, g_res_h = 1080, g_res_scale = 4;
 static void parse_resolution(const char *v) {
     int w = 0, h = 0;
     if (!strncmp(v, "native", 6)) { g_res_w = SCREEN_W * 2; g_res_h = SCREEN_H * 2; g_res_scale = 1; return; }
