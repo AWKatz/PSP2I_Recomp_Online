@@ -76,6 +76,7 @@ __pycache__/
 *.suo
 *.user
 *.swp
+.github
 
 # user test material: game screenshots and run logs
 debugscreen/
