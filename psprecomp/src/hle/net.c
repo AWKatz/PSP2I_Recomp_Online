@@ -129,6 +129,16 @@ static int host_info_query(psp_net_host *out) {
             const ULONG plen = a->FirstUnicastAddress->OnLinkPrefixLength;
             h.netmask = plen ? 0xFFFFFFFFu << (32 - (plen > 32 ? 32 : plen)) : 0;
             h.wireless = a->IfType == IF_TYPE_IEEE80211;
+            {   /* which adapter the game's IP comes from: logged when it changes */
+                static uint32_t logged_ip;
+                if (logged_ip != h.ipv4) {
+                    logged_ip = h.ipv4;
+                    char an[128];
+                    WideCharToMultiByte(CP_UTF8, 0, a->FriendlyName, -1, an, sizeof an, NULL, NULL);
+                    psp_net_log("host network: adapter \"%s\", IP %u.%u.%u.%u (the game's own address)", an,
+                                     h.ipv4 >> 24, (h.ipv4 >> 16) & 0xFF, (h.ipv4 >> 8) & 0xFF, h.ipv4 & 0xFF);
+                }
+            }
             if (a->FirstDnsServerAddress) {
                 const struct sockaddr_in *d = (const struct sockaddr_in *)a->FirstDnsServerAddress->Address.lpSockaddr;
                 if (d->sin_family == AF_INET) h.dns1 = ntohl(d->sin_addr.s_addr);
@@ -147,6 +157,14 @@ static int host_info_query(psp_net_host *out) {
                 if (!(i->ifa_flags & IFF_UP) || (i->ifa_flags & IFF_LOOPBACK)) continue;
                 h.connected = 1;
                 h.ipv4 = ntohl(((struct sockaddr_in *)i->ifa_addr)->sin_addr.s_addr);
+                {
+                    static uint32_t logged_ip;
+                    if (logged_ip != h.ipv4) {
+                        logged_ip = h.ipv4;
+                        psp_net_log("host network: interface %s, IP %u.%u.%u.%u (the game's own address)", i->ifa_name,
+                                         h.ipv4 >> 24, (h.ipv4 >> 16) & 0xFF, (h.ipv4 >> 8) & 0xFF, h.ipv4 & 0xFF);
+                    }
+                }
                 if (i->ifa_netmask) h.netmask = ntohl(((struct sockaddr_in *)i->ifa_netmask)->sin_addr.s_addr);
             }
             freeifaddrs(ifs);
