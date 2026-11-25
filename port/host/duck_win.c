@@ -29,6 +29,24 @@ static const GUID IID_IAudioMeterInformation_ = { 0xC02216F6, 0x8C67, 0x4B5B, { 
 static volatile LONG64 g_heard_ms;         /* GetTickCount64 when other audio was last heard */
 static volatile LONG   g_running;
 
+/* 1 if `pid` runs the same executable as this process: another copy of the
+ * game (a second client on this PC) is not "another program" -- ducking for
+ * it made two copies turn each other down and up in a loop. */
+static int same_exe(DWORD pid) {
+    static char self[MAX_PATH];
+    if (!self[0]) {
+        DWORD n = GetModuleFileNameA(NULL, self, sizeof self);
+        if (!n || n >= sizeof self) { self[0] = 0; return 0; }
+    }
+    HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!p) return 0;
+    char other[MAX_PATH];
+    DWORD n = sizeof other;
+    const int same = QueryFullProcessImageNameA(p, 0, other, &n) && !lstrcmpiA(self, other);
+    CloseHandle(p);
+    return same;
+}
+
 /* 1 if any other program is making sound right now on the default output. */
 static int others_playing(IMMDeviceEnumerator *en) {
     IMMDevice *dev = NULL;
@@ -50,7 +68,7 @@ static int others_playing(IMMDeviceEnumerator *en) {
             DWORD pid = 0;
             IAudioSessionControl2_GetProcessId(ctl2, &pid);
             const int system = IAudioSessionControl2_IsSystemSoundsSession(ctl2) == S_OK;
-            if (pid != self && pid != 0 && !system &&
+            if (pid != self && pid != 0 && !system && !same_exe(pid) &&
                 SUCCEEDED(IAudioSessionControl_QueryInterface(ctl, &IID_IAudioMeterInformation_, (void **)&meter))) {
                 float peak = 0.0f;
                 if (SUCCEEDED(IAudioMeterInformation_GetPeakValue(meter, &peak)) && peak > PEAK_THRESHOLD) found = 1;
