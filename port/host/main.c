@@ -158,7 +158,7 @@ static void exe_dir(char *out, size_t cap);
 
 /* The renderer (menu RENDERER, psp2i_display.ini renderer=, --renderer):
  * REN_D3D11 / REN_GL draw the GE on the GPU, REN_SOFTWARE is the reference. */
-static int g_renderer = REN_D3D11;        /* what runs now */
+static int g_renderer = REN_GL;           /* what runs now */
 static int g_gl_window;                   /* OpenGL presents into the window */
 static int g_ge_thread;                   /* OpenGL on the GE thread (ge_thread=on/off, --ge-thread; off by default) */
 static int g_ge_thread_arg = -1;
@@ -1134,7 +1134,7 @@ static char g_display_ini[600];
 static int  g_last_windowed = RES_DEFAULT;  /* where Alt+Enter returns from fullscreen */
 
 static int g_res_saved = RES_DEFAULT;       /* what psp2i_display.ini holds */
-static int g_ren_saved = REN_D3D11;
+static int g_ren_saved = REN_GL;     /* OpenGL by default; Direct3D 11 is the fallback */
 static int g_vol_saved[VOL_N] = { VOL_STEPS, VOL_STEPS, VOL_STEPS };
 static int g_att_saved = ATT_DEFAULT;
 static int g_openh264 = 1;                  /* fetch Cisco's OpenH264 for movies (h264_openh264.c) */
@@ -2764,7 +2764,7 @@ int main(int argc, char **argv) {
      * reference (--renderer software). */
     g_renderer = renderer ? menu_ren_parse(renderer) : g_ren_saved;
     if (renderer && !strcmp(renderer, "software")) g_renderer = REN_SOFTWARE;
-    if (g_renderer < 0) { fprintf(stderr, "psp2i: unknown renderer '%s'; using d3d11\n", renderer); g_renderer = REN_D3D11; }
+    if (g_renderer < 0) { fprintf(stderr, "psp2i: unknown renderer '%s'; using opengl\n", renderer); g_renderer = REN_GL; }
     if (g_renderer == REN_GL && (gl_platform_init() != 0 || gl_ge_init() != 0)) {
         fprintf(stderr, "psp2i: OpenGL unavailable; falling back to Direct3D 11\n");
         g_renderer = REN_D3D11;

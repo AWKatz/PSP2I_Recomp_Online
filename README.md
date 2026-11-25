@@ -267,7 +267,7 @@ This project is based on the output of the PSP recompilation toolchain and ongoi
 Current capabilities include:
 
 * Native Windows, Android, Mac Os executable
-* Direct3D 11 rendering
+* OpenGL rendering on every platform (Windows can still switch to Direct3D 11 under RENDERER in the settings menu)
 * SDL3 input support
 * Keyboard and controller input
 * Right-stick camera control
