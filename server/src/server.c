@@ -14,6 +14,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 
 #define MAX_SESSIONS 64
 
@@ -199,19 +208,59 @@ static int room_members(const srv *s, int r) {
 }
 
 /* The member's IPv4 address in network order, as the transport sees it (0 = unknown). */
-static uint32_t member_addr(srv *s, const session *ss) {
+/* A session's IPv4 address as the server sees it (network order), 0 if unknown. */
+static uint32_t peer_addr(srv *s, const session *ss) {
     char a[64];
-    if (psp_net_enet_peer_address(s->enet, ss->id, a, sizeof a) != 0) return 0;
+    if (!ss || psp_net_enet_peer_address(s->enet, ss->id, a, sizeof a) != 0) return 0;
     unsigned b[4];
     if (sscanf(a, "%u.%u.%u.%u", &b[0], &b[1], &b[2], &b[3]) != 4) return 0;
     return (uint32_t)(b[0] | b[1] << 8 | b[2] << 16 | b[3] << 24);
 }
 
-static uint32_t put_member(srv *s, uint8_t *m, const session *ss) {
+static int is_loopback(uint32_t a) { return (a & 0xFF) == 127; }
+
+/* This machine's address on the route toward `to` (network order): a UDP
+ * socket "connected" there (no packet is sent) is given the outgoing
+ * interface's address. 0 if there is none. */
+static uint32_t local_addr_toward(uint32_t to) {
+    int fd = (int)socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) return 0;
+    struct sockaddr_in d;
+    memset(&d, 0, sizeof d);
+    d.sin_family = AF_INET;
+    d.sin_port = htons(3658);
+    d.sin_addr.s_addr = to;
+    uint32_t r = 0;
+    struct sockaddr_in l;
+    socklen_t ll = sizeof l;
+    if (connect(fd, (struct sockaddr *)&d, sizeof d) == 0 && getsockname(fd, (struct sockaddr *)&l, &ll) == 0)
+        r = l.sin_addr.s_addr;
+#ifdef _WIN32
+    closesocket(fd);
+#else
+    close(fd);
+#endif
+    return r;
+}
+
+/* The address member `ss` is reached at, as told to `to`: the games talk to
+ * each other directly (UDP 3658). A player on the server's own machine joins
+ * through 127.0.0.1, which a player elsewhere must not be given -- it would
+ * send to itself -- so it gets this machine's address on its route instead. */
+static uint32_t member_addr(srv *s, const session *ss, const session *to) {
+    const uint32_t a = peer_addr(s, ss);
+    if (!is_loopback(a)) return a;
+    const uint32_t t = peer_addr(s, to);
+    if (!t || is_loopback(t)) return a;
+    const uint32_t l = local_addr_toward(t);
+    return l ? l : a;
+}
+
+static uint32_t put_member(srv *s, uint8_t *m, const session *ss, const session *to) {
     psp_mmo_put_u16(m, ss->member_id);
     memset(m + 2, 0, PSP_MMO_NP2_NAME_LEN);
     memcpy(m + 2, ss->name, strnlen(ss->name, PSP_MMO_NP2_NAME_LEN - 1));
-    psp_mmo_put_u32(m + 2 + PSP_MMO_NP2_NAME_LEN, member_addr(s, ss));
+    psp_mmo_put_u32(m + 2 + PSP_MMO_NP2_NAME_LEN, member_addr(s, ss, to));
     return PSP_MMO_NP2_MEMBER_LEN;
 }
 
@@ -245,10 +294,11 @@ static void room_tell(srv *s, int r, const session *who, int joined, const sessi
     psp_mmo_put_u64(m + 8, s->rooms[r].id);
     m[16] = (uint8_t)joined;
     psp_mmo_put_u16(m + 17, s->rooms[r].owner);
-    put_member(s, m + 19, who);
     for (int i = 0; i < MAX_SESSIONS; i++) {
         const session *o = &s->sess[i];
-        if (o->state == SS_ACTIVE && o->room == r && o != except) send_to(s, o->id, m, sizeof m);
+        if (o->state != SS_ACTIVE || o->room != r || o == except) continue;
+        put_member(s, m + 19, who, o);                 /* the address depends on who is told */
+        send_to(s, o->id, m, sizeof m);
     }
 }
 
@@ -261,7 +311,7 @@ static void room_joined_reply(srv *s, session *ss, uint32_t req) {
     psp_mmo_put_u16(m + n, ss->member_id); n += 2;
     for (int i = 0; i < MAX_SESSIONS; i++) {
         const session *o = &s->sess[i];
-        if (o->state == SS_ACTIVE && o->room == ss->room) n += put_member(s, m + n, o);
+        if (o->state == SS_ACTIVE && o->room == ss->room) n += put_member(s, m + n, o, ss);
     }
     send_to(s, ss->id, m, n);
 }
