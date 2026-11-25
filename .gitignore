@@ -124,3 +124,5 @@ logs/
 
 # HD texture packs (third-party; PPSSPP format, TEXTURES/<game id>/)
 TEXTURES/
+
+.DS_Store
