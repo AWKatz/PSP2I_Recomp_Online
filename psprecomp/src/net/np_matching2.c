@@ -51,6 +51,25 @@ static void hle_ContextStart(void) {
     psp_ret(0);
 }
 
+/* sceNpMatching2ContextStop(ctx_id): leaving Internet Multi Mode. The game calls it after
+ * LeaveRoom and retries while it fails; unimplemented, the next way in found a context that
+ * never stopped and the lobby join was interrupted. */
+static void hle_ContextStop(void) {
+    g_ctx_started = 0;
+    mmo_matching2_reset();
+    log_call("sceNpMatching2ContextStop", "0");
+    psp_ret(0);
+}
+
+/* sceNpMatching2DestroyContext(ctx_id) */
+static void hle_DestroyContext(void) {
+    g_ctx_started = 0;
+    g_ctx_created = 0;
+    mmo_matching2_reset();
+    log_call("sceNpMatching2DestroyContext", "0");
+    psp_ret(0);
+}
+
 /* sceNpMatching2RegisterSignalingCallback(ctx_id, callback, arg) */
 static uint32_t g_sig_cb, g_sig_arg;
 static void hle_RegisterSignalingCallback(void) {
@@ -602,6 +621,8 @@ void mmo_matching2_register(void) {
     psp_hle_register(0x6D6D0C75, "sceNpMatching2", "sceNpMatching2SignalingGetConnectionStatus", hle_SignalingGetConnectionStatus);
     psp_hle_register(0xD7D4AEB2, "sceNpMatching2", "sceNpMatching2SetRoomDataExternal", hle_SetRoomDataExternal);
     psp_hle_register(0x190FF903, "sceNpMatching2", "sceNpMatching2ContextStart", hle_ContextStart);
+    psp_hle_register(0x2B3892FC, "sceNpMatching2", "sceNpMatching2ContextStop", hle_ContextStop);
+    psp_hle_register(0x3DE70241, "sceNpMatching2", "sceNpMatching2DestroyContext", hle_DestroyContext);
 }
 
 static void deliver_signaling(void) {
