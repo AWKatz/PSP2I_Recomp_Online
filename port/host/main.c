@@ -573,6 +573,13 @@ static void game_msg(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             return;
         }
 #endif
+        {
+            static int seen;                              /* keyboard diagnosis: the first presses */
+            if (first && ++seen <= 20)
+                fprintf(stderr, "keys: game got key 0x%02X -> PSP bits 0x%04X, stick 0x%X, host 0x%X%s%s\n", (unsigned)wp,
+                        (unsigned)key_bit(wp), key_stick(wp), (unsigned)host_key(wp),
+                        g_menu.open ? " (menu open)" : "", g_menu.key_wait ? " (binding a key)" : "");
+        }
         if (key_capture(wp, first)) return;
         const uint32_t hk = host_key(wp);
         if (hk) { g_host_held |= hk; if (first) g_host_latched |= hk; return; }
@@ -707,9 +714,15 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_SETCURSOR:
         if (g_mouse_held && LOWORD(lp) == HTCLIENT) { SetCursor(NULL); return TRUE; }
         break;
-    case WM_CHAR: case WM_KEYDOWN: case WM_KEYUP:
+    case WM_CHAR: case WM_KEYDOWN: case WM_KEYUP: {
+        static LONG seen;                                 /* keyboard diagnosis: the first presses */
+        if (msg == WM_KEYDOWN && !(lp & (1 << 30)) && InterlockedIncrement(&seen) <= 20)
+            fprintf(stderr, "keys: window got key 0x%02X\n", (unsigned)wp);
         winq_push(msg, wp, lp);
         return 0;
+    }
+    case WM_SETFOCUS: fprintf(stderr, "keys: window has keyboard focus\n"); break;
+    case WM_KILLFOCUS: fprintf(stderr, "keys: window lost keyboard focus\n"); break;
     /* Mouse buttons go to the game thread as keys (VK_LBUTTON ..., bindable in
      * CONTROLS > KEYBOARD); the window keeps the mouse while one is down, so
      * a release outside it still arrives. */
@@ -2912,6 +2925,9 @@ int main(int argc, char **argv) {
     g_menu.mouse_cam = g_mouse_cam;
 #ifdef _WIN32
     keys_to_menu();
+    fprintf(stderr, "keys: bound");                     /* keyboard diagnosis */
+    for (int i = 0; i < KB_N; i++) fprintf(stderr, " %s=%s", KEY_INI[i], g_menu.key_name[i][0] ? g_menu.key_name[i] : "none");
+    fprintf(stderr, "\n");
 #else
     g_menu.hidden |= MENU_BIT(MENU_KEYS);
 #endif
