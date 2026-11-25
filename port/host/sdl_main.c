@@ -23,7 +23,7 @@
  *                      elsewhere psp2i.ini iso=<path>, else the first *.iso in the folder;
  *                      or the extracted files
  *                      in GameData/disc/ (PSP_GAME/...)
- *   GameData/flash/    the PSP fonts (on Android copied in from a folder the
+ *   font/              the PSP fonts (Android: GameData/flash/) (on Android copied in from a folder the
  *                      user picks, once)
  *   EBOOT.BIN          optional: a decrypted EBOOT, when the disc's is encrypted
  *   GameData/ms/       the memory stick (saves), created on first save
@@ -1109,8 +1109,18 @@ static uint8_t *find_game(const char *root, size_t *len) {
         return NULL;
     }
 
-    /* The PSP's fonts: GameData/flash/ (on Android, copied in once). */
+    /* The PSP's fonts: font/ in the game folder (on Android GameData/flash/font, copied in once). */
+#ifndef SDL_PLATFORM_ANDROID
+    {
+        char old[1100];
+        snprintf(old, sizeof old, "%s/flash/font", root);
+        snprintf(p, sizeof p, "%s/font", g_base);
+        psp_io_set_font_dir(p, old);
+        if (!psp_io_font_dir()[0]) snprintf(p, sizeof p, "%s", old);   /* could not move them: the old place */
+    }
+#else
     snprintf(p, sizeof p, "%s/flash/font", root);
+#endif
 #ifdef SDL_PLATFORM_ANDROID
     if (!path_exists(p) && !android_copy_fonts())
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "PSP2i",
@@ -1213,6 +1223,7 @@ int main(int argc, char **argv) {
         if (texpack_init(dir) == 0) gl_ge_set_texture_pack(texpack_lookup);
     }
     psp_io_set_root(root);
+    psp_io_set_save_dir(g_base, "NPJH50332");               /* the save folder: NPJH50332/ in the game folder */
     psp_net_set_log(net_line);
     psp_net_set_forced_off(1);                               /* no online play: the WLAN switch reads off */
 #ifdef PSPRECOMP_MMO_NET

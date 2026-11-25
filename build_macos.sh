@@ -8,8 +8,10 @@ G=build/gen/recomp_funcs.c
 if [[ ! -f $G || EBOOT.BIN -nt $G || port/hooks.txt -nt $G || port/fixes.txt -nt $G || port/switches.txt -nt $G ]]; then
     build/recomp/tools/allegrexrecomp/allegrexrecomp emit EBOOT.BIN build/gen recomp --hooks port/hooks.txt --fixes port/fixes.txt --switches port/switches.txt
 fi
-# ./build_macos.sh             the game with online play, and the server: build/macos/psp2i, build/macos/server/psp2i_server
-# ./build_macos.sh --offline   the game without online play:              build/macos-offline/psp2i
+# ./build_macos.sh             the game with online play, and the server
+# ./build_macos.sh --offline   the game without online play
+# Everything needed to play ends up in build/PSP2i_macOS/; put your EBOOT.BIN, game .iso
+# and NPJH50332/ save folder in the root of that folder (see README.md).
 OUT=build/macos
 EXTRA=(-DENABLE_MMO_NET=ON -DBUILD_DEDICATED_SERVER=ON)
 if [[ "${1:-}" == --offline ]]; then
@@ -18,4 +20,16 @@ if [[ "${1:-}" == --offline ]]; then
 fi
 cmake -S port/macos -B $OUT -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix)" "${EXTRA[@]}"
 cmake --build $OUT -j 4
-echo "Built $OUT/psp2i$([[ -f $OUT/server/psp2i_server ]] && echo " and $OUT/server/psp2i_server")"
+
+# The game folder: the programs, plus the default text files (never overwriting edited ones).
+DIST=build/PSP2i_macOS
+mkdir -p $DIST
+cp $OUT/psp2i $OUT/libpsp2i_atrac.dylib $DIST/
+for f in terms_of_use.txt notices.txt; do [[ -f $DIST/$f ]] || cp $f $DIST/; done
+[[ -f EBOOT.BIN && ! -f $DIST/EBOOT.BIN ]] && cp EBOOT.BIN $DIST/
+if [[ -f $OUT/server/psp2i_server ]]; then
+    mkdir -p $DIST/server/config
+    cp $OUT/server/psp2i_server $DIST/server/
+    for f in server/config/*; do [[ -f $DIST/server/config/${f:t} ]] || cp $f $DIST/server/config/; done
+fi
+echo "Built $DIST: run $DIST/psp2i$([[ -f $DIST/server/psp2i_server ]] && echo " (server: cd $DIST/server && ./psp2i_server)")"

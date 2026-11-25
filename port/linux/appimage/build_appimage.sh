@@ -4,8 +4,9 @@
 #   port/linux/appimage/build_appimage.sh             the game with online play, and the server
 #   port/linux/appimage/build_appimage.sh --offline   the game without online play
 #
-# Writes build/PSP2i-<arch>.AppImage and build/psp2i_server-<arch>.AppImage (with --offline:
-# build/PSP2i-offline-<arch>.AppImage). Each is one file: copy it anywhere and run it.
+# Writes the game folder build/PSP2i_Linux/: PSP2i-<arch>.AppImage (with --offline:
+# PSP2i-offline-<arch>.AppImage) and server/psp2i_server-<arch>.AppImage. Put your
+# EBOOT.BIN, game .iso and NPJH50332/ save folder in the root of build/PSP2i_Linux.
 #
 # Needs cmake, ninja, a C/C++ compiler, nasm (FFmpeg), curl, and the X11/Wayland/ALSA/
 # PulseAudio development headers that SDL3 builds against. SDL3 and a minimal FFmpeg
@@ -69,6 +70,8 @@ LD=$W/linuxdeploy-$ARCH.AppImage
     "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-$ARCH.AppImage"; chmod +x "$LD"; }
 export LD_LIBRARY_PATH=$DEPS/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 A=port/linux/appimage
+DIST=$ROOT/build/PSP2i_Linux
+mkdir -p "$DIST/server"
 
 pack() {  # name binary apprun desktop output [extra setup]
     local dir=$W/$1.AppDir
@@ -76,15 +79,21 @@ pack() {  # name binary apprun desktop output [extra setup]
     mkdir -p "$dir/usr/bin"
     install -m755 "$2" "$dir/usr/bin/"
     [[ -n "${6:-}" ]] && "$6" "$dir"
-    (cd "$W" && OUTPUT="$ROOT/build/$5" "$LD" --appdir "$dir" -e "$dir/usr/bin/$(basename "$2")" \
+    (cd "$W" && OUTPUT="$DIST/$5" LDAI_OUTPUT="$DIST/$5" "$LD" --appdir "$dir" -e "$dir/usr/bin/$(basename "$2")" \
         -d "$ROOT/$A/$4" -i "$ROOT/$A/psp2i.png" --custom-apprun "$ROOT/$A/$3" --output appimage)
-    echo "Wrote build/$5"
+    [[ -f "$DIST/$5" ]] || { echo "linuxdeploy did not write $DIST/$5" >&2; exit 1; }
+    echo "Wrote $DIST/$5"
 }
+game_files() { install -m755 "$B/libpsp2i_atrac.so" "$1/usr/bin/"; }   # ATRAC music, loaded next to the game
 server_files() { mkdir -p "$1/usr/share/psp2i_server/config"; cp server/config/* "$1/usr/share/psp2i_server/config/"; }
 
 if [[ $MMO == ON ]]; then
-    pack psp2i "$B/psp2i" AppRun-game psp2i.desktop "PSP2i-$ARCH.AppImage"
-    pack psp2i_server "$B/server/psp2i_server" AppRun-server psp2i_server.desktop "psp2i_server-$ARCH.AppImage" server_files
+    pack psp2i "$B/psp2i" AppRun-game psp2i.desktop "PSP2i-$ARCH.AppImage" game_files
+    pack psp2i_server "$B/server/psp2i_server" AppRun-server psp2i_server.desktop "server/psp2i_server-$ARCH.AppImage" server_files
 else
-    pack psp2i-offline "$B/psp2i" AppRun-game psp2i.desktop "PSP2i-offline-$ARCH.AppImage"
+    pack psp2i-offline "$B/psp2i" AppRun-game psp2i.desktop "PSP2i-offline-$ARCH.AppImage" game_files
 fi
+# The default text files (edited ones are kept), and EBOOT.BIN if it is not there yet.
+for f in terms_of_use.txt notices.txt; do [[ -f $DIST/$f ]] || cp $f "$DIST/"; done
+[[ -f EBOOT.BIN && ! -f $DIST/EBOOT.BIN ]] && cp EBOOT.BIN "$DIST/"
+echo "Game folder: $DIST"

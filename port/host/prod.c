@@ -7,7 +7,7 @@
  *   <root>\GameData\disc\PSP_GAME\PARAM.SFO, USRDIR\   the extracted disc
  *   <root>\EBOOT.BIN                                  a decrypted game EBOOT, or else the
  *                                                     disc's PSP_GAME\SYSDIR\EBOOT.BIN
- *   <root>\GameData\flash\font\*.pgf                  optional: the PSP firmware fonts (without
+ *   <root>\font\*.pgf                               optional: the PSP firmware fonts (without
  *                                                     them the game's text uses a Windows font;
  *                                                     font_win.c)
  *   <root>\SDL3.dll                                   controllers, sound

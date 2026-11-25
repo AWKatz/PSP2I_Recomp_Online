@@ -1,11 +1,12 @@
 @echo off
-rem Build PSP2i for Windows: build\windows\Release\psp2i.exe (with online play) and psp2i_server.exe.
+rem Build PSP2i for Windows (with online play, and the server). Everything needed to play ends up
+rem in build\PSP2i_Windows\; put your EBOOT.BIN, game .iso and NPJH50332\ save folder in its root.
 rem
 rem   build_port.bat           compile (what you want most of the time)
 rem   build_port.bat regen     first build the recompiler and generate build\gen from EBOOT.BIN
 rem                            (needed the first time, and after changing port\hooks.txt,
 rem                            port\fixes.txt or the recompiler)
-rem   build_port.bat offline   the game without online play, in build\windows-offline\Release
+rem   build_port.bat offline   the game without online play
 rem
 rem Needs Visual Studio (C++ workload, which includes CMake) or CMake on the PATH.
 rem Nothing here copies into build\dist or prod; see build_finalbuild.bat / build_prod.bat.
@@ -67,8 +68,25 @@ echo == Building the game (%OUT%) ==
 if errorlevel 1 goto failed
 "%CMAKE%" --build %OUT% --config Release --parallel --target %TARGETS%
 if errorlevel 1 goto failed
+
+rem ---- the game folder: the programs, plus the default text files (edited ones are kept) ----
+set "DIST=%ROOT%build\PSP2i_Windows"
+if not exist "%DIST%" mkdir "%DIST%"
+copy /y "%OUT%\Release\*.exe" "%DIST%\" >nul
+copy /y "%OUT%\Release\*.dll" "%DIST%\" >nul 2>nul
+if exist "%OUT%\Release\licenses" xcopy /e /i /y /q "%OUT%\Release\licenses" "%DIST%\licenses" >nul
+for %%F in (terms_of_use.txt notices.txt) do if not exist "%DIST%\%%F" copy "%ROOT%%%F" "%DIST%\" >nul
+if exist "%ROOT%EBOOT.BIN" if not exist "%DIST%\EBOOT.BIN" copy "%ROOT%EBOOT.BIN" "%DIST%\" >nul
+set "SRV=%OUT%\server\Release\psp2i_server.exe"
+if not exist "%SRV%" set "SRV=%OUT%\Release\psp2i_server.exe"
+if not exist "%SRV%" goto done
+if not exist "%DIST%\server\config" mkdir "%DIST%\server\config"
+move /y "%DIST%\psp2i_server.exe" "%DIST%\server\" >nul 2>nul
+copy /y "%SRV%" "%DIST%\server\" >nul
+for %%F in ("%ROOT%server\config\*") do if not exist "%DIST%\server\config\%%~nxF" copy "%%F" "%DIST%\server\config\" >nul
+:done
 echo.
-echo Done: %ROOT%%OUT%\Release\psp2i.exe
+echo Done: %DIST%\psp2i.exe
 exit /b 0
 
 :no_cmake

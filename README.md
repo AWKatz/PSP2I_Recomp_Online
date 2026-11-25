@@ -34,27 +34,36 @@ You need your own copy of the game: the disc image (`.iso`) and a decrypted `EBO
 
 | Platform | Install once | Build | You get |
 | --- | --- | --- | --- |
-| macOS (Apple Silicon) | `brew install cmake ninja sdl3 ffmpeg` | `./build_macos.sh` | `Launch-PSP2i.command` (repository root) |
-| Linux / Steam Deck | the packages in [port/linux](port/linux/README.md) | `port/linux/appimage/build_appimage.sh` | `build/PSP2i-x86_64.AppImage` |
-| Windows | Visual Studio and CMake | `build_finalbuild.bat` | `build\dist\psp2i.exe` |
+| macOS (Apple Silicon) | `brew install cmake ninja sdl3 ffmpeg` | `./build_macos.sh` | `build/PSP2i_macOS/` |
+| Linux / Steam Deck | the packages in [port/linux](port/linux/README.md) | `port/linux/appimage/build_appimage.sh` | `build/PSP2i_Linux/` |
+| Windows | Visual Studio and CMake | `build_port.bat` | `build\PSP2i_Windows\` |
 | Android | see [port/android](port/android/README.md) | `build_android.bat` | `build\dist\psp2i-android.apk` |
 
-The build includes online play and the server (`psp2i_server`); see [Online play and the server](#online-play-and-the-server). For a game without online play: `./build_macos.sh --offline`, `port/linux/appimage/build_appimage.sh --offline`, or `build_port.bat offline` on Windows.
+For a game without online play: `./build_macos.sh --offline`, `port/linux/appimage/build_appimage.sh --offline`, or `build_port.bat offline` on Windows.
 
-**3. Put your game files in the game folder and play.**
+**3. Put your game files in the build folder and play.**
 
-The game folder is the folder holding what you got in step 2: the repository root on macOS, the folder with the AppImage on Linux, the folder with `psp2i.exe` on Windows. On Android, the app asks for a folder on first start. Every platform uses the same layout:
+Each desktop build produces one self-contained, portable folder, `build/PSP2i_<system>/`. It holds the game, the server and everything they read, with no installer, no system folders and no setup elsewhere. Everything you supply goes in the folder's root, next to the game. Copy or move the whole folder anywhere (another drive, a USB stick, another machine with the same OS) and it keeps working. The build copies `EBOOT.BIN` in for you. Every platform uses the same layout:
 
 ```
-your .iso                    the game's disc image, any name: the first .iso in the folder is used
-EBOOT.BIN                    the decrypted game executable
-GameData/flash/font/*.pgf    PSP firmware fonts (without them, menu text is missing)
-GameData/ms/PSP/SAVEDATA/    saves: copy PPSSPP's memstick/PSP/SAVEDATA/NPJH50332 folder here to continue
-psp2i.ini                    optional settings (see below); created when you change one in game
-TEXTURES/NPJH50332/          optional: an HD texture pack made for PPSSPP (macOS, Linux, Android)
-client_config.toml           online builds: which server to join (found on the LAN by default)
-terms_of_use.txt, notices.txt   online builds, server owners: the texts shown when players connect
+PSP2i_<system>/                 PSP2i_macOS, PSP2i_Linux or PSP2i_Windows
+  psp2i                         the game (psp2i.exe on Windows, PSP2i-<arch>.AppImage on Linux)
+  your .iso                     you add: the disc image, any name (the first .iso in the folder is used)
+  EBOOT.BIN                     the decrypted game executable (copied in by the build)
+  font/                         you add: the PSP firmware fonts (*.pgf); without them, menu text is missing
+  NPJH50332/                    your save folder: copy PPSSPP's memstick/PSP/SAVEDATA/NPJH50332 here to continue
+  psp2i.ini                     optional settings (see below); created when you change one in game
+  client_config.toml            optional: which server to join (found on the LAN by default)
+  terms_of_use.txt, notices.txt server owners: the texts shown when players connect
+  TEXTURES/NPJH50332/           optional: an HD texture pack made for PPSSPP (macOS, Linux)
+  logs/                         created on first run
+  server/                       the dedicated server, self-contained too
+    psp2i_server                (psp2i_server.exe on Windows, the server AppImage on Linux)
+    config/                     loot tables and rates (drop_tables.json, rates.toml)
+                                its database is created here on first run
 ```
+
+The game's macOS shortcut, `Launch-PSP2i.command` in the repository root, starts `build/PSP2i_macOS/psp2i`. The server runs from its own folder: `cd server && ./psp2i_server --lan`; see [Online play and the server](#online-play-and-the-server). Older layouts are moved into place on first start: fonts in `GameData/flash/font/` move to `font/`, and saves in `GameData/ms/PSP/SAVEDATA/` move to the root. Android keeps its own layout: the app asks for a folder on first start (see [port/android](port/android/README.md)).
 
 Then run it. If something is missing, the game says what and where.
 
@@ -62,7 +71,7 @@ HD textures use PPSSPP's pack format and hashing, so PPSSPP packs work as they a
 - `PSP2I_TEXTURES=DIR` uses a pack from somewhere else.
 - `PSP2I_TEXDUMP=1` writes every texture the pack doesn't replace to `<pack>/new/` (as `<hash>.png`, listed in `new/textures.ini`), which is how packs are made.
 
-Other Windows build scripts: `build_port.bat regen` (a development build in `build\windows\Release\`) and `build_prod.bat` (the community build in `build\prod\`). The older Windows layout, with the extracted disc in `GameData\disc\`, still works; see [port/prod_README.txt](port/prod_README.txt).
+Other Windows build scripts: `build_port.bat regen` (regenerates the game code first) and `build_prod.bat` (the community build in `build\prod\`). The older Windows layout, with the extracted disc in `GameData\disc\`, still works; see [port/prod_README.txt](port/prod_README.txt).
 
 ### Frame rate and resolution
 
@@ -107,10 +116,10 @@ This is the Japanese release, so Circle confirms and Cross cancels. On Windows t
 ### Online play and the server
 
 ```sh
-./build_macos.sh              # build/macos/psp2i and build/macos/server/psp2i_server
+./build_macos.sh              # build/PSP2i_macOS/psp2i and build/PSP2i_macOS/server/psp2i_server
 cmake -S server -B build/server -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build/server    # the server alone, any OS: build/server/psp2i_server
-cd server && ../build/server/psp2i_server --lan    # run it where config/ is, or pass --drop-tables/--rates
+cd build/PSP2i_macOS/server && ./psp2i_server --lan    # run it where config/ is, or pass --drop-tables/--rates
 ```
 
 `psp2i_server` options:
@@ -309,7 +318,7 @@ Use the commands under [Quick Start](#quick-start). On Windows, `build_port.bat 
 
 1. Builds the recompiler into `build\recomp`.
 2. Regenerates `build\gen` from `EBOOT.BIN` (taken from the repository root, or from an older `FinalBuild\` folder).
-3. Builds `build\windows\Release\psp2i.exe`.
+3. Builds `psp2i.exe` and `psp2i_server.exe` into `build\PSP2i_Windows\`.
 
 Without `regen`, it only recompiles. Put the SDL3 and FFmpeg DLLs (`avcodec-63`, `avutil-61`, `swresample-7`) next to the exe.
 

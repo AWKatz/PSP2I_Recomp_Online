@@ -2521,6 +2521,24 @@ static int boot_guest(const char *eboot, const char *iso, const char *root, cons
         if (e && *e == '1') { psp_vfpu_force_runtime(1); printf("vfpu: inline operations disabled (PSP2I_VFPU_NOINLINE=1)\n"); }
     }
     if (ms_dir[0]) { psp_io_set_ms_root(ms_dir); printf("ms:    %s\n", ms_dir); }
+    else {                                                   /* the save folder: NPJH50332\ in the game folder (GameData's parent) */
+        char top[600];
+        snprintf(top, sizeof top, "%s", root);
+        char *s1 = strrchr(top, '/'), *s2 = strrchr(top, '\\');
+        char *cut = !s1 ? s2 : !s2 ? s1 : s1 > s2 ? s1 : s2;
+        if (cut) *cut = '\0'; else snprintf(top, sizeof top, ".");
+        psp_io_set_save_dir(top, "NPJH50332");
+    }
+    {                                                        /* the PSP fonts: font\ in the game folder */
+        char top[600], fd[700], old[700];
+        snprintf(top, sizeof top, "%s", root);
+        char *s1 = strrchr(top, '/'), *s2 = strrchr(top, '\\');
+        char *cut = !s1 ? s2 : !s2 ? s1 : s1 > s2 ? s1 : s2;
+        if (cut) *cut = '\0'; else snprintf(top, sizeof top, ".");
+        snprintf(fd, sizeof fd, "%s/font", top);
+        snprintf(old, sizeof old, "%s/flash/font", root);
+        psp_io_set_font_dir(fd, old);
+    }
     psp_sysmem_set_heap(mi->load_hi, USER_PARTITION_TOP);
     psp_recomp_register();
 
@@ -2793,7 +2811,8 @@ int main(int argc, char **argv) {
     {   /* the game's text font: the saved choice, else Windows' own */
         char fonts_dir[700], pgf_dir[700];
         snprintf(fonts_dir, sizeof fonts_dir, "%s/fonts", dir);
-        snprintf(pgf_dir, sizeof pgf_dir, "%s/flash/font", root);
+        if (psp_io_font_dir()[0]) snprintf(pgf_dir, sizeof pgf_dir, "%s", psp_io_font_dir());
+        else snprintf(pgf_dir, sizeof pgf_dir, "%s/flash/font", root);
 #ifdef _WIN32
         CreateDirectoryA(fonts_dir, NULL);     /* where extra fonts go */
 #endif

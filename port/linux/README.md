@@ -20,23 +20,23 @@ An AppImage is a single file that runs on most distributions with nothing to ins
 
    ```sh
    port/linux/appimage/build_appimage.sh             # the game with online play, and the server:
-                                                     #   build/PSP2i-x86_64.AppImage
-                                                     #   build/psp2i_server-x86_64.AppImage
+                                                     #   build/PSP2i_Linux/PSP2i-x86_64.AppImage
+                                                     #   build/PSP2i_Linux/server/psp2i_server-x86_64.AppImage
    port/linux/appimage/build_appimage.sh --offline   # the game without online play:
-                                                     #   build/PSP2i-offline-x86_64.AppImage
+                                                     #   build/PSP2i_Linux/PSP2i-offline-x86_64.AppImage
    ```
 
    The script generates `build/gen` from `EBOOT.BIN` if needed. It builds SDL3 3.4.20 and a minimal FFmpeg 9.0.2 (movie playback only) from source, then the game, and packs each program with `linuxdeploy`.
 
    An AppImage runs on distributions at least as new as the one it was built on. To reach more machines, build on an older release such as Ubuntu 22.04.
 
-4. Put the game files in the folder that holds the AppImage, for a portable copy. Or put them in `~/.local/share/psp2i/`, which is used when there's no `EBOOT.BIN` next to the AppImage. `PSP2I_DATA` overrides both.
+4. Put the game files in the root of `build/PSP2i_Linux/` (the folder that holds the AppImage; the build copies `EBOOT.BIN` in). You can move that whole folder anywhere. Or put them in `~/.local/share/psp2i/`, which is used when there's no `EBOOT.BIN` next to the AppImage. `PSP2I_DATA` overrides both.
 
    ```
    your .iso                 the first .iso in the folder is used (or psp2i.ini iso=/run/media/<card>/psp2i.iso)
    EBOOT.BIN
-   GameData/flash/font/      the PSP fonts (*.pgf)
-   GameData/ms/PSP/SAVEDATA/ saves; copy PPSSPP's NPJH50332 folder here to continue
+   font/                     the PSP fonts (*.pgf)
+   NPJH50332/                saves; copy PPSSPP's NPJH50332 folder here to continue
    client_config.toml        which server to join (found on the LAN by default)
    terms_of_use.txt, notices.txt   server owners: the texts shown when players connect
    ```
@@ -45,7 +45,7 @@ An AppImage is a single file that runs on most distributions with nothing to ins
 
 ### The server AppImage
 
-`psp2i_server-x86_64.AppImage` runs the dedicated server, for example `./psp2i_server-x86_64.AppImage --lan`. It keeps its database and `config/` (loot tables and rates; the defaults are copied in on first run) in `psp2i_server_data/` next to the AppImage, or in `PSP2I_SERVER_DATA`. All its options are in [server/README.md](../../server/README.md).
+`server/psp2i_server-x86_64.AppImage` runs the dedicated server, for example `cd server && ./psp2i_server-x86_64.AppImage --lan`. It keeps its database and `config/` (loot tables and rates; the defaults are copied in on first run) in its own folder, `build/PSP2i_Linux/server/`, or in `PSP2I_SERVER_DATA`. All its options are in [server/README.md](../../server/README.md).
 
 ## Building without an AppImage
 

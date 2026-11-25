@@ -251,7 +251,7 @@ static void hle_Open(void) {
             if (data && psp_pgf_parse(&g_font[slot].pgf, data, size) != 0) { free(data); data = NULL; }
             if (!data && !g_host) {
                 fprintf(stderr, "psprecomp: sceFontOpen: cannot load %s (put the PSP font files in "
-                                "<root>/flash/font/)\n", path);
+                                "font/ in the game folder)\n", path);
                 e = ERR_FONT_FILE_OPEN_FAILED;
             } else {
                 /* Without the file the slot draws only with the host font. */

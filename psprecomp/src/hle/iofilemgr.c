@@ -27,6 +27,9 @@
 #  define fseek64 _fseeki64
 #  define ftell64 _ftelli64
 #  define host_mkdir(p) _mkdir(p)
+#  ifndef strncasecmp
+#    define strncasecmp _strnicmp
+#  endif
 #else
 #  include <dirent.h>
 #  include <strings.h>
@@ -252,6 +255,38 @@ static void load_lba_map(void) {
 static char g_ms_root[512];
 void psp_io_set_ms_root(const char *dir) { snprintf(g_ms_root, sizeof g_ms_root, "%s", dir ? dir : ""); }
 
+/* Optional: the firmware fonts (flash0:/font/) live in `dir` instead of <root>/flash/font. */
+static char g_font_dir[512];
+void psp_io_set_font_dir(const char *dir, const char *old) {   /* old: where they were before, or NULL */
+    snprintf(g_font_dir, sizeof g_font_dir, "%s", dir ? dir : "");
+    if (!g_font_dir[0] || !old) return;
+    struct stat st;
+    if (stat(old, &st) == 0 && stat(g_font_dir, &st) != 0) {          /* fonts in the old place move once */
+        if (rename(old, g_font_dir) == 0) fprintf(stderr, "fonts: moved %s to %s\n", old, g_font_dir);
+        else { fprintf(stderr, "fonts: could not move %s to %s; using the old place\n", old, g_font_dir); g_font_dir[0] = '\0'; }
+    }
+}
+const char *psp_io_font_dir(void) { return g_font_dir; }
+
+/* Optional: save folders ms0:/PSP/SAVEDATA/<prefix>* live in <dir>/<prefix>*
+ * instead (e.g. NPJH50332/ at the root of the game folder). */
+static char g_save_dir[512], g_save_prefix[32];
+void psp_io_set_save_dir(const char *dir, const char *prefix) {
+    snprintf(g_save_dir, sizeof g_save_dir, "%s", dir ? dir : "");
+    snprintf(g_save_prefix, sizeof g_save_prefix, "%s", prefix ? prefix : "");
+    if (!g_save_dir[0] || !g_save_prefix[0]) return;
+    /* A save made before (in <root>/ms/PSP/SAVEDATA/<prefix>) moves to the new place once. */
+    char old[1100], neu[1100];
+    struct stat st;
+    snprintf(old, sizeof old, "%s/ms/PSP/SAVEDATA/%s", g_ms_root[0] ? g_ms_root : g_root, g_save_prefix);
+    if (g_ms_root[0]) snprintf(old, sizeof old, "%s/PSP/SAVEDATA/%s", g_ms_root, g_save_prefix);
+    snprintf(neu, sizeof neu, "%s/%s", g_save_dir, g_save_prefix);
+    if (stat(old, &st) == 0 && stat(neu, &st) != 0) {
+        if (rename(old, neu) == 0) fprintf(stderr, "saves: moved %s to %s\n", old, neu);
+        else { fprintf(stderr, "saves: could not move %s to %s; using the old place\n", old, neu); g_save_dir[0] = '\0'; }
+    }
+}
+
 void psp_io_set_root(const char *root) {
     snprintf(g_root, sizeof g_root, "%s", root ? root : ".");
     load_lba_map();
@@ -382,7 +417,14 @@ static void map_path(const char *guest, char *out, size_t cap) {
     else if (!strncmp(p, "host0:", 6))  { p += 6; sub = "host"; }
 
     while (*p == '/' || *p == '\\') p++;
-    if (g_ms_root[0] && !strcmp(sub, "ms")) snprintf(out, cap, "%s/%s", g_ms_root, p);
+    if (g_save_dir[0] && !strcmp(sub, "ms") && !strncasecmp(p, "PSP/SAVEDATA/", 13)
+        && !strncasecmp(p + 13, g_save_prefix, strlen(g_save_prefix))) {
+        p += 13;
+        snprintf(out, cap, "%s/%s", g_save_dir, p);
+    } else if (g_font_dir[0] && !strcmp(sub, "flash") && !strncasecmp(p, "font/", 5)) {
+        p += 5;
+        snprintf(out, cap, "%s/%s", g_font_dir, p);
+    } else if (g_ms_root[0] && !strcmp(sub, "ms")) snprintf(out, cap, "%s/%s", g_ms_root, p);
     else snprintf(out, cap, "%s/%s/%s", g_root, sub, p);
 #ifndef _WIN32
     const size_t prefix = strlen(out) - strlen(p);

@@ -264,6 +264,9 @@ void psp_utility_reset(void);
 void psp_io_set_ms_log(void (*fn)(const char *line));
 /* Put the memory stick (ms0:) in its own folder instead of <root>/ms. */
 void psp_io_set_ms_root(const char *dir);
+void psp_io_set_font_dir(const char *dir, const char *old);   /* flash0:/font/* -> <dir>/*; fonts in `old` move there once */
+const char *psp_io_font_dir(void);
+void psp_io_set_save_dir(const char *dir, const char *prefix);  /* SAVEDATA/<prefix>* -> <dir>/<prefix>* */
 
 /* PSP savedata encryption, supplied by the host (the toolkit carries none).
  * With it, saves are read and written as on hardware -- encrypted with the

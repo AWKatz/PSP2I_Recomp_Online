@@ -3,12 +3,12 @@
 # database and config/ (drop_tables.json, rates.toml; the defaults are copied in on
 # first run):
 #   $PSP2I_SERVER_DATA, if set;
-#   else psp2i_server_data/ next to the .AppImage.
+#   else the folder holding the .AppImage (build/PSP2i_Linux/server).
 # Arguments go to the server as they are, e.g. --lan, --port, --max-players.
 HERE="$(dirname "$(readlink -f "$0")")"
 if [ -z "$PSP2I_SERVER_DATA" ]; then
-    if [ -n "$APPIMAGE" ]; then PSP2I_SERVER_DATA="$(dirname "$APPIMAGE")/psp2i_server_data"
-    else PSP2I_SERVER_DATA="$PWD/psp2i_server_data"; fi
+    if [ -n "$APPIMAGE" ]; then PSP2I_SERVER_DATA="$(dirname "$APPIMAGE")"
+    else PSP2I_SERVER_DATA="$PWD"; fi
 fi
 mkdir -p "$PSP2I_SERVER_DATA/config"
 for f in "$HERE"/usr/share/psp2i_server/config/*; do

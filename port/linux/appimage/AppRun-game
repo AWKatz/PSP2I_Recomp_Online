@@ -13,6 +13,6 @@ if [ -z "$PSP2I_DATA" ]; then
     fi
 fi
 export PSP2I_DATA
-mkdir -p "$PSP2I_DATA/GameData/flash/font" "$PSP2I_DATA/GameData/ms/PSP/SAVEDATA"
+mkdir -p "$PSP2I_DATA"
 cd "$PSP2I_DATA" || exit 1
 exec "$HERE/usr/bin/psp2i" "$@"
