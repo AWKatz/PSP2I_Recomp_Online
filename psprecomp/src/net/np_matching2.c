@@ -564,7 +564,24 @@ static void ok_request(const char *name, uint16_t event) {
     psp_ret(id ? 0 : SCE_KERNEL_ERROR_ERROR);
 }
 /* sceNpMatching2SetRoomDataInternal(ctx, {u64 room id, u32 flag filter, u32 flags, bin attrs...} *, options *, u32 *) */
-static void hle_SetRoomDataInternal(void) { ok_request("sceNpMatching2SetRoomDataInternal", EV_SET_ROOM_DATA_INTERNAL); }
+static void hle_SetRoomDataInternal(void) {
+    /* Logged in full for now: the room's internal attributes are not stored or passed on yet,
+     * and a joiner may need them (its first signaling packet carries 0 where the owner's
+     * carries a 4-byte value). +16 BinAttr * {u16 id, -, u8 *data, u32 size}, +20 count. */
+    const uint32_t rq = psp_arg(1);
+    if (rq) {
+        const uint32_t arr = psp_read32(rq + 16), num = psp_read32(rq + 20);
+        psp_net_log("np2: SetRoomDataInternal: flag filter 0x%08X, flags 0x%08X, %u bin attr(s)", psp_read32(rq + 8),
+                    psp_read32(rq + 12), num);
+        for (uint32_t i = 0; arr && i < num && i < 8; i++) {
+            const uint32_t e = arr + 12 * i, ptr = psp_read32(e + 4), sz = psp_read32(e + 8);
+            char hex[3 * 64 + 1] = "";
+            for (uint32_t k = 0; ptr && k < sz && k < 64; k++) snprintf(hex + 3 * k, 4, "%02x ", psp_read8(ptr + k));
+            psp_net_log("np2:   bin attr 0x%04X, %u bytes: %s%s", psp_read16(e), sz, hex, sz > 64 ? "..." : "");
+        }
+    }
+    ok_request("sceNpMatching2SetRoomDataInternal", EV_SET_ROOM_DATA_INTERNAL);
+}
 /* sceNpMatching2SetRoomDataExternal(ctx, {u64 room id, searchable ints, bins...} *, options *, u32 *):
  * the owner updates what searches show (e.g. the player count). Accepted; the server's copy
  * keeps the attributes from creation for now. */
