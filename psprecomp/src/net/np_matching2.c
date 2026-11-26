@@ -214,6 +214,7 @@ static struct { uint16_t member, event; } g_sig[32];
 /* Room events (member joined / left) and room messages, for the next frame. */
 #define ROOM_EV_MEMBER_JOINED 0x1101
 #define ROOM_EV_MEMBER_LEFT   0x1102
+#define ROOM_EV_OWNER_CHANGED 0x1105   /* data {u16 previous owner, u16 new owner}: the new owner's game takes over the room (0x08A69498) */
 #define ROOM_MSG_MESSAGE      0x2102
 typedef struct { int kind; uint16_t event, member; char name[PSP_MMO_NP2_NAME_LEN + 1]; uint16_t size; uint8_t data[PSP_MMO_NP2_MSG_MAX]; } room_post;
 static room_post g_post[16];
@@ -410,6 +411,7 @@ void mmo_matching2_on_packet(const uint8_t *m, uint32_t len) {
         memcpy(mb.name, m + 21, PSP_MMO_NP2_NAME_LEN);
         mb.addr = psp_mmo_get_u32(m + 21 + PSP_MMO_NP2_NAME_LEN);
         const uint16_t owner = psp_mmo_get_u16(m + 17);
+        const uint16_t prev_owner = g_room.count ? g_room.members[g_room.owner].member_id : 0;
         int at = -1;
         for (int k = 0; k < g_room.count; k++) if (g_room.members[k].member_id == mb.member_id) at = k;
         if (m[16] && at < 0 && g_room.count < PSP_MMO_NP2_ROOM_MAX) g_room.members[g_room.count++] = mb;
@@ -426,6 +428,14 @@ void mmo_matching2_on_packet(const uint8_t *m, uint32_t len) {
             room_post *q = &g_post[g_npost++];
             q->kind = 0; q->event = m[16] ? ROOM_EV_MEMBER_JOINED : ROOM_EV_MEMBER_LEFT; q->member = mb.member_id;
             memcpy(q->name, mb.name, sizeof q->name);
+        }
+        /* The owner left and the server passed the room on: the games must hear it, or the new
+         * owner never acts as one and a player who joins next waits forever for its greeting. */
+        if (owner && prev_owner && owner != prev_owner && g_npost < 16) {
+            room_post *q = &g_post[g_npost++];
+            memset(q, 0, sizeof *q);
+            q->kind = 2; q->event = ROOM_EV_OWNER_CHANGED; q->member = owner; q->size = prev_owner;
+            psp_net_log("np2: room %llu: owner %u -> %u", (unsigned long long)g_room.room_id, prev_owner, owner);
         }
     } else if (type == MSG_S2C_NP2_ROOM_MSG && len >= 20) {
         const uint16_t from = psp_mmo_get_u16(m + 16), size = psp_mmo_get_u16(m + 18);
@@ -646,7 +656,15 @@ static void deliver_room(void) {
         uint8_t d[16 + 76 + 24 + PSP_MMO_NP2_MSG_MAX];
         memset(d, 0, sizeof d);
         const uint32_t lo = (uint32_t)g_room.room_id, hi = (uint32_t)(g_room.room_id >> 32);
-        if (q->kind == 0) {
+        if (q->kind == 2) {                                         /* owner changed */
+            if (!g_ev_cb) continue;
+            uint8_t o[8] = { 0 };
+            o[0] = (uint8_t)q->size; o[1] = (uint8_t)(q->size >> 8);         /* previous owner */
+            o[2] = (uint8_t)q->member; o[3] = (uint8_t)(q->member >> 8);     /* new owner */
+            psp_mem_write_block(base, o, sizeof o);
+            psp_net_log("np2: room event 0x%04X (owner %u -> %u) -> callback 0x%08X", q->event, q->size, q->member, g_ev_cb);
+            psp_call_guest8(g_ev_cb, CTX_ID, 0, lo, hi, q->event, base, g_ev_arg, 0);
+        } else if (q->kind == 0) {
             if (!g_ev_cb) continue;
             put32(d, base + 16);                                   /* {member *, cause} */
             uint8_t *mr = d + 16;
