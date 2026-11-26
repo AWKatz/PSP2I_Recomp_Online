@@ -377,7 +377,7 @@ static void hle_Connect(void) {
         return;
     }
     if (g_fd[fd].nonblock) {
-        psp_net_log_line("socket %u: connecting to %s%s (in progress)", fd, addr_text(&sa, t, sizeof t), any ? " (0.0.0.0 = this host)" : "");
+        psp_net_log_line("socket %u: connecting to %s%s (in progress)  [game: %08X]", fd, addr_text(&sa, t, sizeof t), any ? " (0.0.0.0 = this host)" : "", psp_cpu.r[31] - 8);
         psp_ret(fail(P_EINPROGRESS));
         return;
     }
@@ -413,7 +413,7 @@ static void log_data(uint32_t fd, const char *dir, const uint8_t *p, int n) {
     const int k = n < 48 ? n : 48;
     for (int i = 0; i < k; i++) snprintf(hex + 3 * i, 4, "%02x ", p[i]);
     hex[3 * k] = '\0';
-    psp_net_log_line("socket %u: %s %d bytes: %s%s", fd, dir, n, hex, n > k ? "..." : "");
+    psp_net_log_line("socket %u: %s %d bytes: %s%s  [game: %08X]", fd, dir, n, hex, n > k ? "..." : "", psp_cpu.r[31] - 8);
     /* PSP2I_NET_DUMP=1: every sent message in full (both ends are usually this
      * runtime, so sends alone cover the traffic), 64 bytes a line, up to 8 MB. */
     static int dump = -1;
