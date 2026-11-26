@@ -36,6 +36,7 @@ enum {
     MSG_C2S_NP2_JOIN      = 0x0042,   /* join a room */
     MSG_C2S_NP2_LEAVE     = 0x0043,   /* leave my room */
     MSG_C2S_NP2_ROOM_MSG  = 0x0044,   /* a room message to the other members (or one) */
+    MSG_C2S_NP2_SET_EXT   = 0x0045,   /* the owner updates the room's external attributes */
     MSG_S2C_NP2_REPLY     = 0x8040,   /* the answer to a request above */
     MSG_S2C_NP2_MEMBER    = 0x8041,   /* someone joined or left my room */
     MSG_S2C_NP2_ROOM_MSG  = 0x8042,   /* a room message from a member */
@@ -74,6 +75,8 @@ enum { PSP_MMO_WARP_OPTIONS = 1, PSP_MMO_WARP_WEAPONS = 2 };   /* flags: options
  * MSG_C2S_NP2_JOIN:   hdr, request u32, room u64
  * MSG_C2S_NP2_LEAVE:  hdr, request u32, room u64
  * MSG_C2S_NP2_ROOM_MSG: hdr, room u64, to member u16 (0 = everyone else), size u16, data
+ * MSG_C2S_NP2_SET_EXT:  hdr, room u64, attrs size u16, ATTRS (merged into the room's by kind and id;
+ *                       searches and GetRoomDataExternalList then show them)
  * MSG_S2C_NP2_REPLY:  hdr, request u32, status u32 (0 = ok, else PSP_MMO_NP2_ERR_*), then
  *     search:       count u16, {ROOM} x count
  *     create, join: ROOM, my member id u16, then {MEMBER} x the room's member count

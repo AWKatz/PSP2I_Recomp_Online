@@ -89,6 +89,9 @@ static void hle_RegisterSignalingCallback(void) {
 #define EV_CREATE_JOIN_ROOM    0x0101
 #define EV_LEAVE_ROOM          0x0103
 #define EV_SEARCH_ROOM         0x0106
+#define EV_GET_ROOM_EXT        0x0005   /* GetRoomDataExternalList */
+static uint64_t g_ext_ids[8];                               /* the rooms it asked for */
+static int g_next_ids;
 #define EV_SEND_ROOM_MESSAGE   0x0108
 #define EV_SET_ROOM_DATA_INTERNAL 0x0109
 
@@ -337,17 +340,24 @@ static void on_reply(const uint8_t *m, uint32_t len) {
         enqueue(req, g_pend[i].cb, g_pend[i].arg, ev, (int32_t)0x80550C01 + (int32_t)status, NULL, 0);
         return;
     }
-    if (ev == EV_SEARCH_ROOM && len >= 18) {
+    if ((ev == EV_SEARCH_ROOM || ev == EV_GET_ROOM_EXT) && len >= 18) {
+        const int list = ev == EV_GET_ROOM_EXT;               /* {RoomDataExternal *, u32 count}, only the rooms asked for */
         const uint32_t count = psp_mmo_get_u16(m + 16);
-        const uint32_t ro = lay_take(&l, 16);
-        put32(g_lay + ro, 1); put32(g_lay + ro + 4, count); put32(g_lay + ro + 8, count);
-        uint32_t p = 18, prev = 0;
+        const uint32_t ro = lay_take(&l, list ? 8 : 16);
+        if (!list) { put32(g_lay + ro, 1); put32(g_lay + ro + 4, count); put32(g_lay + ro + 8, count); }
+        uint32_t p = 18, prev = 0, kept = 0;
         for (uint32_t k = 0; k < count && p + PSP_MMO_NP2_ROOM_HDR_LEN <= len; k++) {
             const uint8_t *r = m + p;
             const uint32_t attrs_len = psp_mmo_get_u16(r + 38);
+            if (list) {
+                const uint64_t rid = psp_mmo_get_u64(r);
+                int want = 0;
+                for (int q = 0; q < g_next_ids; q++) if (g_ext_ids[q] == rid) want = 1;
+                if (!want) { p += PSP_MMO_NP2_ROOM_HDR_LEN + attrs_len; continue; }
+            }
             const uint32_t e = lay_take(&l, 88), u = lay_take(&l, 44), nm = lay_take(&l, 24);
             if (e == UINT32_MAX || u == UINT32_MAX || nm == UINT32_MAX) break;
-            if (k == 0) put32(g_lay + ro + 12, base + e); else put32(g_lay + prev, base + e);
+            if (kept++ == 0) put32(g_lay + ro + (list ? 0 : 12), base + e); else put32(g_lay + prev, base + e);
             prev = e;
             uint8_t *x = g_lay + e;
             x[4] = SERVER_ID; put32(x + 8, WORLD_ID);
@@ -364,7 +374,8 @@ static void on_reply(const uint8_t *m, uint32_t len) {
             if (p + PSP_MMO_NP2_ROOM_HDR_LEN + attrs_len <= len) lay_attrs(&l, e, r + PSP_MMO_NP2_ROOM_HDR_LEN, attrs_len);
             p += PSP_MMO_NP2_ROOM_HDR_LEN + attrs_len;
         }
-        psp_net_log("np2: search: %u room(s)", count);
+        if (list) put32(g_lay + ro + 4, kept);
+        psp_net_log(list ? "np2: room data: %u of %u room(s)" : "np2: search: %u room(s)", list ? kept : count, count);
         enqueue(req, g_pend[i].cb, g_pend[i].arg, ev, 0, g_lay, l.n);
         return;
     }
@@ -471,9 +482,12 @@ static void hle_SearchRoom(void) {
 }
 
 /* The request's attribute lists as ATTRS (net_proto.h). */
-static uint32_t pack_attrs(uint32_t rq, uint8_t *a, uint32_t cap) {
+/* The attribute lists of a request as ATTRS (net_proto.h): searchable ints {u16 id, -, u32 value}
+ * (pointer, count) at rq + ioff, searchable then external BinAttrs {u16 id, -, u8 *data, u32 size}
+ * at rq + boff and rq + boff + 8. CreateJoinRoom: 32 / 40; SetRoomDataExternal: 8 / 16. */
+static uint32_t pack_attrs_at(uint32_t rq, uint32_t ioff, uint32_t boff, uint8_t *a, uint32_t cap) {
     uint32_t p = 0;
-    const uint32_t ia = psp_read32(rq + 32), ni = psp_read32(rq + 36);
+    const uint32_t ia = psp_read32(rq + ioff), ni = psp_read32(rq + ioff + 4);
     a[p++] = (uint8_t)(ia && ni <= 16 ? ni : 0);
     for (uint32_t i = 0; i < a[0]; i++) {
         psp_mmo_put_u16(a + p, psp_read16(ia + 8 * i)); psp_mmo_put_u32(a + p + 2, psp_read32(ia + 8 * i + 4)); p += 6;
@@ -481,7 +495,7 @@ static uint32_t pack_attrs(uint32_t rq, uint8_t *a, uint32_t cap) {
     const uint32_t nb_at = p++;
     a[nb_at] = 0;
     for (int k = 0; k < 2; k++) {                         /* searchable bins (kind 1), external bins (kind 2) */
-        const uint32_t arr = psp_read32(rq + 40 + 8 * (uint32_t)k), num = psp_read32(rq + 44 + 8 * (uint32_t)k);
+        const uint32_t arr = psp_read32(rq + boff + 8 * (uint32_t)k), num = psp_read32(rq + boff + 4 + 8 * (uint32_t)k);
         for (uint32_t i = 0; arr && i < num && i < 8; i++) {
             const uint32_t e = arr + 12 * i, ptr = psp_read32(e + 4), sz = psp_read32(e + 8);
             if (p + 5 + sz > cap || sz > 512) continue;
@@ -493,6 +507,7 @@ static uint32_t pack_attrs(uint32_t rq, uint8_t *a, uint32_t cap) {
     }
     return p;
 }
+static uint32_t pack_attrs(uint32_t rq, uint8_t *a, uint32_t cap) { return pack_attrs_at(rq, 32, 40, a, cap); }
 
 /* sceNpMatching2CreateJoinRoom(ctx_id, request *, options *, u32 *request id, ?) */
 /* CreateJoinRoom and JoinRoom also take the room's callbacks: $a3 {room event callback, arg},
@@ -585,7 +600,37 @@ static void hle_SetRoomDataInternal(void) {
 /* sceNpMatching2SetRoomDataExternal(ctx, {u64 room id, searchable ints, bins...} *, options *, u32 *):
  * the owner updates what searches show (e.g. the player count). Accepted; the server's copy
  * keeps the attributes from creation for now. */
-static void hle_SetRoomDataExternal(void) { ok_request("sceNpMatching2SetRoomDataExternal", 0x0004); }
+static void hle_SetRoomDataExternal(void) {
+    const uint32_t rq = psp_arg(1);
+    if (rq && g_room.room_id) {
+        static uint8_t m[18 + PSP_MMO_NP2_ATTRS_MAX];
+        psp_mmo_put_hdr(m, MSG_C2S_NP2_SET_EXT);
+        psp_mmo_put_u64(m + 8, g_room.room_id);
+        const uint32_t alen = pack_attrs_at(rq, 8, 16, m + 18, PSP_MMO_NP2_ATTRS_MAX);
+        psp_mmo_put_u16(m + 16, (uint16_t)alen);
+        mmo_ctrl_send(m, 18 + alen);
+        psp_net_log("np2: room %llu: external attributes updated (%u bytes) -> server", (unsigned long long)g_room.room_id, alen);
+    }
+    ok_request("sceNpMatching2SetRoomDataExternal", 0x0004);
+}
+
+/* sceNpMatching2GetRoomDataExternalList(ctx, {u64 *room ids, u32 count, u16 *attr ids, u32 count} *,
+ * options *, u32 *request id): a joiner reads the room it joined (the owner keeps its data there).
+ * Answered from the server's room list, as SearchRoom is; reply {RoomDataExternal *, u32 count}. */
+static void hle_GetRoomDataExternalList(void) {
+    const uint32_t rq = psp_arg(1);
+    g_next_ids = 0;
+    if (rq) {
+        const uint32_t ids = psp_read32(rq), n = psp_read32(rq + 4);
+        for (uint32_t i = 0; ids && i < n && g_next_ids < 8; i++)
+            g_ext_ids[g_next_ids++] = (uint64_t)psp_read32(ids + 8 * i) | ((uint64_t)psp_read32(ids + 8 * i + 4) << 32);
+    }
+    const uint32_t id = pend_add(psp_arg(2), psp_arg(3), EV_GET_ROOM_EXT);
+    uint8_t m[12];
+    psp_mmo_put_hdr(m, MSG_C2S_NP2_SEARCH);
+    psp_mmo_put_u32(m + 8, id);
+    server_request("sceNpMatching2GetRoomDataExternalList", m, sizeof m, id);
+}
 
 /* sceNpMatching2LeaveRoom(ctx, {u64 room id, opt data} *, options *, u32 *) */
 static void hle_LeaveRoom(void) {
@@ -647,6 +692,7 @@ void mmo_matching2_register(void) {
     psp_hle_register(0x7BBFC427, "sceNpMatching2", NULL, hle_JoinRoom);   /* sceNpMatching2JoinRoom: NID to be confirmed */
     psp_hle_register(0x6D6D0C75, "sceNpMatching2", "sceNpMatching2SignalingGetConnectionStatus", hle_SignalingGetConnectionStatus);
     psp_hle_register(0xD7D4AEB2, "sceNpMatching2", "sceNpMatching2SetRoomDataExternal", hle_SetRoomDataExternal);
+    psp_hle_register(0x12C5A111, "sceNpMatching2", "sceNpMatching2GetRoomDataExternalList", hle_GetRoomDataExternalList);
     psp_hle_register(0x190FF903, "sceNpMatching2", "sceNpMatching2ContextStart", hle_ContextStart);
     psp_hle_register(0x2B3892FC, "sceNpMatching2", "sceNpMatching2ContextStop", hle_ContextStop);
     psp_hle_register(0x3DE70241, "sceNpMatching2", "sceNpMatching2DestroyContext", hle_DestroyContext);

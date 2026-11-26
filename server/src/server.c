@@ -417,6 +417,74 @@ static void on_np2_leave(srv *s, session *ss, const psp_net_packet *p) {
     np2_status(s, ss, psp_mmo_get_u32(p->data + 8), PSP_MMO_NP2_OK);
 }
 
+/* ATTRS (net_proto.h) parsed: ints {id, value}, bins {id, kind, size, data}. */
+typedef struct { uint16_t id; uint32_t v; } attr_int;
+typedef struct { uint16_t id; uint8_t kind; uint16_t size; const uint8_t *data; } attr_bin;
+static int attrs_parse(const uint8_t *a, uint32_t len, attr_int *ints, int *ni, attr_bin *bins, int *nb, int cap) {
+    uint32_t p = 0;
+    *ni = *nb = 0;
+    if (len == 0) return 0;
+    const int ci = a[p++];
+    for (int i = 0; i < ci; i++) {
+        if (p + 6 > len || *ni >= cap) return -1;
+        ints[*ni].id = psp_mmo_get_u16(a + p); ints[*ni].v = psp_mmo_get_u32(a + p + 2); (*ni)++; p += 6;
+    }
+    if (p >= len) return 0;
+    const int cb = a[p++];
+    for (int i = 0; i < cb; i++) {
+        if (p + 5 > len || *nb >= cap) return -1;
+        attr_bin *b = &bins[(*nb)++];
+        b->id = psp_mmo_get_u16(a + p); b->kind = a[p + 2]; b->size = psp_mmo_get_u16(a + p + 3);
+        if (p + 5u + b->size > len) return -1;
+        b->data = a + p + 5;
+        p += 5u + b->size;
+    }
+    return 0;
+}
+
+/* The owner updates the room's external attributes (sceNpMatching2SetRoomDataExternal): merged
+ * into the room's by kind and id, so a joiner's GetRoomDataExternalList (answered from the
+ * search list) sees what the owner published -- its game reads the owner from there. */
+static void on_np2_set_ext(srv *s, session *ss, const psp_net_packet *p) {
+    if (p->len < 18 || ss->room < 0) return;
+    room *rm = &s->rooms[ss->room];
+    if (psp_mmo_get_u64(p->data + 8) != rm->id || rm->owner != ss->member_id) return;
+    const uint16_t alen = psp_mmo_get_u16(p->data + 16);
+    if (alen > PSP_MMO_NP2_ATTRS_MAX || 18u + alen > p->len) return;
+    enum { CAP = 32 };
+    attr_int oi[CAP], ni_[CAP];
+    attr_bin ob[CAP], nb_[CAP];
+    int noi, nob, nni, nnb;
+    uint8_t old[PSP_MMO_NP2_ATTRS_MAX];
+    memcpy(old, rm->attrs, rm->attrs_len);
+    if (attrs_parse(old, rm->attrs_len, oi, &noi, ob, &nob, CAP) || attrs_parse(p->data + 18, alen, ni_, &nni, nb_, &nnb, CAP)) return;
+    for (int i = 0; i < nni; i++) {                    /* ints: replace by id, else add */
+        int k = 0;
+        while (k < noi && oi[k].id != ni_[i].id) k++;
+        if (k == noi) { if (noi == CAP) continue; noi++; }
+        oi[k] = ni_[i];
+    }
+    for (int i = 0; i < nnb; i++) {                    /* bins: replace by kind and id, else add */
+        int k = 0;
+        while (k < nob && !(ob[k].id == nb_[i].id && ob[k].kind == nb_[i].kind)) k++;
+        if (k == nob) { if (nob == CAP) continue; nob++; }
+        ob[k] = nb_[i];
+    }
+    uint8_t out[PSP_MMO_NP2_ATTRS_MAX];
+    uint32_t n = 0;
+    out[n++] = (uint8_t)noi;
+    for (int i = 0; i < noi; i++) { psp_mmo_put_u16(out + n, oi[i].id); psp_mmo_put_u32(out + n + 2, oi[i].v); n += 6; }
+    out[n++] = (uint8_t)nob;
+    for (int i = 0; i < nob; i++) {
+        if (n + 5u + ob[i].size > sizeof out) { out[1 + 6 * noi] = (uint8_t)i; break; }
+        psp_mmo_put_u16(out + n, ob[i].id); out[n + 2] = ob[i].kind; psp_mmo_put_u16(out + n + 3, ob[i].size);
+        memcpy(out + n + 5, ob[i].data, ob[i].size);
+        n += 5u + ob[i].size;
+    }
+    memcpy(rm->attrs, out, n);
+    rm->attrs_len = (uint16_t)n;
+}
+
 /* A room message: relayed to every other member, or to one. */
 static void on_np2_room_msg(srv *s, session *ss, const psp_net_packet *p) {
     if (p->len < 20 || ss->room < 0) return;
@@ -687,6 +755,7 @@ static void on_packet(const psp_net_packet *p, void *u) {
     else if (type == MSG_C2S_NP2_JOIN) on_np2_join(s, ss, p);
     else if (type == MSG_C2S_NP2_LEAVE) on_np2_leave(s, ss, p);
     else if (type == MSG_C2S_NP2_ROOM_MSG) on_np2_room_msg(s, ss, p);
+    else if (type == MSG_C2S_NP2_SET_EXT) on_np2_set_ext(s, ss, p);
 }
 
 /* ---- lifecycle ---------------------------------------------------------------------- */
