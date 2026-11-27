@@ -81,7 +81,47 @@ static struct {
     uint64_t rcvtimeo_us, sndtimeo_us;   /* 0 = no timeout */
     uint32_t sends, recvs;
     uint32_t send_errs, recv_errs;       /* failures logged so far (the first few only) */
+    uint16_t udp_port;                   /* the UDP port bound (0: none) */
+    uint32_t share_of;                   /* the earlier socket on the same port, which reads for it (0: none) */
 } g_fd[MAX_FD];
+
+/* Several UDP sockets on one port (the lobby opens two on 3658, and reads only the first).
+ * Which one the host hands a datagram to is up to the host (Windows: undefined; Linux: spread
+ * over them; macOS: the first, at least for loopback), so movement packets landed on the
+ * socket nobody reads and were lost -- choppy, jumping players in the lobby. Here the first
+ * socket on a port also reads what lands on the later ones, and they read nothing. */
+static int rx_fdset(uint32_t fd, fd_set *set, int *maxs) {
+    if (g_fd[fd].share_of) return 0;
+    int n = 0;
+    for (uint32_t i = 1; i < MAX_FD; i++) {
+        if (!g_fd[i].used || (i != fd && g_fd[i].share_of != fd)) continue;
+        FD_SET(g_fd[i].s, set);
+        if ((int)g_fd[i].s > *maxs) *maxs = (int)g_fd[i].s;
+        n++;
+    }
+    return n;
+}
+static int rx_isset(uint32_t fd, fd_set *set) {
+    if (g_fd[fd].share_of) return 0;
+    for (uint32_t i = 1; i < MAX_FD; i++)
+        if (g_fd[i].used && (i == fd || g_fd[i].share_of == fd) && FD_ISSET(g_fd[i].s, set)) return 1;
+    return 0;
+}
+/* The host socket to read fd's next datagram from; 0 if fd gets nothing (a later socket). */
+static int rx_pick(uint32_t fd, hsock *s) {
+    *s = g_fd[fd].s;
+    if (!g_fd[fd].udp_port) return 1;
+    if (g_fd[fd].share_of) return 0;
+    fd_set r;
+    FD_ZERO(&r);
+    int maxs = 0;
+    if (rx_fdset(fd, &r, &maxs) <= 1) return 1;
+    struct timeval tv = { 0, 0 };
+    if (select(maxs + 1, &r, NULL, NULL, &tv) <= 0 || FD_ISSET(g_fd[fd].s, &r)) return 1;
+    for (uint32_t i = 1; i < MAX_FD; i++)
+        if (g_fd[i].used && g_fd[i].share_of == fd && FD_ISSET(g_fd[i].s, &r)) { *s = g_fd[i].s; return 1; }
+    return 1;
+}
 
 static uint32_t g_errno;
 static int g_ws_up;
@@ -215,10 +255,11 @@ static int wait_sock(uint32_t fd, int want_write, uint64_t timeout_us) {
         if (g_fd[fd].aborted) return -1;
         fd_set r, w, x;
         FD_ZERO(&r); FD_ZERO(&w); FD_ZERO(&x);
+        int maxs = (int)g_fd[fd].s;
         if (want_write) { FD_SET(g_fd[fd].s, &w); FD_SET(g_fd[fd].s, &x); }
-        else FD_SET(g_fd[fd].s, &r);
+        else rx_fdset(fd, &r, &maxs);
         struct timeval tv = { 0, 0 };
-        if (select((int)g_fd[fd].s + 1, &r, &w, &x, &tv) > 0) return 1;
+        if (select(maxs + 1, &r, &w, &x, &tv) > 0) return 1;
         if (end && psp_sched_now_us() >= end) return 0;
         nap();
     }
@@ -296,6 +337,17 @@ static void hle_Bind(void) {
         return;
     }
     psp_net_log_line("socket %u: bound to %s", fd, addr_text(&sa, t, sizeof t));
+    if (g_fd[fd].type == SOCK_DGRAM_P || g_fd[fd].type == SOCK_CONN_DGRAM_P) {
+        struct sockaddr_in got;
+        socklen_t gl = sizeof got;
+        if (getsockname(g_fd[fd].s, (struct sockaddr *)&got, &gl) == 0) g_fd[fd].udp_port = ntohs(got.sin_port);
+        for (uint32_t i = 1; i < MAX_FD && g_fd[fd].udp_port; i++)
+            if (i != fd && g_fd[i].used && !g_fd[i].share_of && g_fd[i].udp_port == g_fd[fd].udp_port) {
+                g_fd[fd].share_of = i;
+                psp_net_log_line("socket %u: shares port %u with socket %u, which reads for both", fd, (unsigned)g_fd[fd].udp_port, i);
+                break;
+            }
+    }
     psp_ret(ok(0));
 }
 
@@ -474,8 +526,11 @@ static uint32_t do_recv(uint32_t fd, uint32_t buf, uint32_t len, uint32_t flags,
         struct sockaddr_in peer;
         socklen_t pl = sizeof peer;
         memset(&peer, 0, sizeof peer);
-        const int n = from ? recvfrom(g_fd[fd].s, (char *)tmp, (int)len, host_flags(flags), (struct sockaddr *)&peer, &pl)
-                           : recv(g_fd[fd].s, (char *)tmp, (int)len, host_flags(flags));
+        hsock hs;
+        const int pick = rx_pick(fd, &hs);
+        const int n = !pick ? -1
+                    : from ? recvfrom(hs, (char *)tmp, (int)len, host_flags(flags), (struct sockaddr *)&peer, &pl)
+                           : recv(hs, (char *)tmp, (int)len, host_flags(flags));
         if (n >= 0) {
             if (n) psp_mem_write_block(buf, tmp, (uint32_t)n);
             log_data(fd, n ? "received" : "received end of stream", tmp, n ? n : 1);
@@ -484,14 +539,16 @@ static uint32_t do_recv(uint32_t fd, uint32_t buf, uint32_t len, uint32_t flags,
             r = ok((uint32_t)n);
             break;
         }
-        const int e = last_error();
 #ifdef _WIN32
+        const int e = pick ? last_error() : WSAEWOULDBLOCK;
         if (e == WSAEMSGSIZE && from) {          /* datagram larger than the buffer: BSD truncates */
             psp_mem_write_block(buf, tmp, len);
             write_addr(from, fromlen, &peer);
             r = ok(len);
             break;
         }
+#else
+        const int e = pick ? last_error() : EAGAIN;
 #endif
         if (!would_block(e) && g_fd[fd].recv_errs++ < 20)
             psp_net_log_line("socket %u: receive failed (host error %d)", fd, e);
@@ -528,6 +585,11 @@ static void hle_Recvfrom(void) {
 }
 
 static void fd_free(uint32_t fd) {
+    uint32_t heir = 0;                     /* the first socket sharing its port reads for the rest now */
+    for (uint32_t i = 1; i < MAX_FD; i++) {
+        if (!g_fd[i].used || g_fd[i].share_of != fd) continue;
+        if (!heir) { heir = i; g_fd[i].share_of = 0; } else g_fd[i].share_of = heir;
+    }
     if (g_fd[fd].s != BAD_SOCK) close_sock(g_fd[fd].s);
     memset(&g_fd[fd], 0, sizeof g_fd[fd]);
 }
@@ -648,7 +710,7 @@ static void hle_Select(void) {
             const uint32_t bit = 1u << (fd & 31), k = fd >> 5;
             if (!((rin[k] | win[k] | xin[k]) & bit)) continue;
             if (!fd_ok(fd)) { psp_ret(bad_fd(fd, __func__)); return; }
-            if (rin[k] & bit) FD_SET(g_fd[fd].s, &r);
+            if (rin[k] & bit) rx_fdset(fd, &r, &maxs);
             if (win[k] & bit) FD_SET(g_fd[fd].s, &w);
             if (xin[k] & bit) FD_SET(g_fd[fd].s, &x);
             if ((int)g_fd[fd].s > maxs) maxs = (int)g_fd[fd].s;
@@ -660,7 +722,7 @@ static void hle_Select(void) {
             for (uint32_t fd = 1; fd < n; fd++) {
                 if (!fd_ok(fd)) continue;
                 const uint32_t bit = 1u << (fd & 31), k = fd >> 5;
-                if ((rin[k] & bit) && FD_ISSET(g_fd[fd].s, &r)) { rout[k] |= bit; count++; }
+                if ((rin[k] & bit) && rx_isset(fd, &r)) { rout[k] |= bit; count++; }
                 if ((win[k] & bit) && FD_ISSET(g_fd[fd].s, &w)) { wout[k] |= bit; count++; }
                 if ((xin[k] & bit) && FD_ISSET(g_fd[fd].s, &x)) { xout[k] |= bit; count++; }
             }
