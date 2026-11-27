@@ -50,6 +50,7 @@ typedef struct {
      * of the message): replayed to a player who joins later (room_replay). */
     struct { uint32_t category; uint16_t size; uint8_t data[PSP_MMO_NP2_MSG_MAX]; } said[8];
     int      nsaid;
+    int      replay_due;   /* joined: the others' messages go to it once it speaks itself */
 } session;
 
 /* An Internet Multi Mode room: a 12-player lobby room or a party room. */
@@ -358,6 +359,7 @@ static void room_leave(srv *s, session *ss) {
 static void room_enter(srv *s, session *ss, int r) {
     room_leave(s, ss);
     ss->nsaid = 0;
+    ss->replay_due = 0;
     ss->room = r;
     ss->member_id = ++s->rooms[r].next_member;
 }
@@ -437,7 +439,7 @@ static void on_np2_join(srv *s, session *ss, const psp_net_packet *p) {
     slog(s, "rooms: '%s' joined room %llu (%d/%u)", ss->name, (unsigned long long)id, room_members(s, r), (unsigned)s->rooms[r].max);
     room_joined_reply(s, ss, req);
     room_tell(s, r, ss, 1, ss);
-    room_replay(s, ss);
+    ss->replay_due = 1;                               /* room_replay: after the owner's welcome */
 }
 
 static void on_np2_leave(srv *s, session *ss, const psp_net_packet *p) {
@@ -525,6 +527,10 @@ static void on_np2_room_msg(srv *s, session *ss, const psp_net_packet *p) {
     psp_mmo_put_u16(m + 16, ss->member_id);
     psp_mmo_put_u16(m + 18, size);
     memcpy(m + 20, p->data + 20, size);
+    /* A joiner's first broadcast comes once its game has taken the owner's welcome (room messages
+     * of categories 1, 3, 6): now it can take the others' character data. Sent before that,
+     * straight after the join, the game dropped it. */
+    if (ss->replay_due) { ss->replay_due = 0; room_replay(s, ss); }
     if (!to && size >= 4) {                           /* a broadcast: kept for players who join later */
         const uint32_t cat = psp_mmo_get_u32(p->data + 20);
         int k = 0;
