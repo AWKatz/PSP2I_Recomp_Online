@@ -93,7 +93,6 @@ if [[ $MMO == ON ]]; then
 else
     pack psp2i-offline "$B/psp2i" AppRun-game psp2i.desktop "PSP2i-offline-$ARCH.AppImage" game_files
 fi
-# The default text files (edited ones are kept), and EBOOT.BIN if it is not there yet.
-for f in terms_of_use.txt notices.txt; do [[ -f $DIST/$f ]] || cp $f "$DIST/"; done
+# EBOOT.BIN, if it is not there yet.
 [[ -f EBOOT.BIN && ! -f $DIST/EBOOT.BIN ]] && cp EBOOT.BIN "$DIST/"
 echo "Game folder: $DIST"

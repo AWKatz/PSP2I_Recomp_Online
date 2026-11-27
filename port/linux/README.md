@@ -38,7 +38,6 @@ An AppImage is a single file that runs on most distributions with nothing to ins
    font/                     the PSP fonts (*.pgf)
    NPJH50332/                saves; copy PPSSPP's NPJH50332 folder here to continue
    client_config.toml        which server to join (found on the LAN by default)
-   terms_of_use.txt, notices.txt   server owners: the texts shown when players connect
    ```
 
 5. Run it: `./PSP2i-x86_64.AppImage`, or double-click it. On the Steam Deck, add it with Steam's "Add a Non-Steam Game" to play in Game Mode; the Deck's controls reach the game as an SDL3 gamepad.

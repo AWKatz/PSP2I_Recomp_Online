@@ -21,11 +21,11 @@ fi
 cmake -S port/macos -B $OUT -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix)" "${EXTRA[@]}"
 cmake --build $OUT -j 4
 
-# The game folder: the programs, plus the default text files (never overwriting edited ones).
+# The game folder: the programs; the server and its config/ (Terms of Use, Notices, rates, drop
+# tables: defaults copied once, edited ones kept).
 DIST=build/PSP2i_macOS
 mkdir -p $DIST
 cp $OUT/psp2i $OUT/libpsp2i_atrac.dylib $DIST/
-for f in terms_of_use.txt notices.txt; do [[ -f $DIST/$f ]] || cp $f $DIST/; done
 [[ -f EBOOT.BIN && ! -f $DIST/EBOOT.BIN ]] && cp EBOOT.BIN $DIST/
 if [[ -f $OUT/server/psp2i_server ]]; then
     mkdir -p $DIST/server/config

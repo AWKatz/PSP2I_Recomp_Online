@@ -69,13 +69,12 @@ if errorlevel 1 goto failed
 "%CMAKE%" --build %OUT% --config Release --parallel --target %TARGETS%
 if errorlevel 1 goto failed
 
-rem ---- the game folder: the programs, plus the default text files (edited ones are kept) ----
+rem ---- the game folder: the programs; the server and its config\ (texts, rates, drop tables: edited ones are kept) ----
 set "DIST=%ROOT%build\PSP2i_Windows"
 if not exist "%DIST%" mkdir "%DIST%"
 copy /y "%OUT%\Release\*.exe" "%DIST%\" >nul
 copy /y "%OUT%\Release\*.dll" "%DIST%\" >nul 2>nul
 if exist "%OUT%\Release\licenses" xcopy /e /i /y /q "%OUT%\Release\licenses" "%DIST%\licenses" >nul
-for %%F in (terms_of_use.txt notices.txt) do if not exist "%DIST%\%%F" copy "%ROOT%%%F" "%DIST%\" >nul
 if exist "%ROOT%EBOOT.BIN" if not exist "%DIST%\EBOOT.BIN" copy "%ROOT%EBOOT.BIN" "%DIST%\" >nul
 set "SRV=%OUT%\server\Release\psp2i_server.exe"
 if not exist "%SRV%" set "SRV=%OUT%\Release\psp2i_server.exe"

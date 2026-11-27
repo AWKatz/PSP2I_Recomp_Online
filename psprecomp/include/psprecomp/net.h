@@ -91,6 +91,13 @@ void psp_net_mmo_pump(void);
 /* Join the server now (otherwise the game's sceNetAdhocctlInit does). 0 = joined. */
 int  psp_net_mmo_connect(void);
 int  psp_net_mmo_connected(void);
+/* The server's Terms of Use / Notices (kind PSP_MMO_TEXT_*, net_proto.h), sent after the
+ * handshake: 1 with the UTF-8 text in *text / *len, 0 if the server has none, -1 if it has not
+ * arrived (yet, or ever: an older server). */
+int  psp_net_mmo_server_text(int kind, const char **text, uint32_t *len);
+/* Connect if not connected, then wait up to timeout_ms for both texts. Only network messages
+ * are read meanwhile (no game callbacks run): safe inside a firmware call. */
+void psp_net_mmo_wait_texts(unsigned timeout_ms);
 
 /* The party directory (Multi Mode): the parties leaders are hosting on the server. */
 typedef struct {

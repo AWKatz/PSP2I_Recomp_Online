@@ -31,6 +31,8 @@ typedef struct {
     db         *database;             /* drops are recorded here (else numbered in memory) */
     const char *drop_tables_path;     /* JSON; reloaded when its contents change */
     const char *rates_path;           /* TOML; reloaded when its contents change */
+    const char *terms_path;           /* UTF-8 text: the Terms of Use window (read at each join) */
+    const char *notices_path;         /* UTF-8 text: the Notices window (read at each join) */
     uint32_t    kills_per_sec;        /* per player (burst 2x; default 10) */
     uint64_t    rng_seed;             /* 0 = from the OS */
 } srv_config;

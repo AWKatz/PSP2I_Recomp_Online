@@ -26,6 +26,7 @@
 #include <psprecomp/hle.h>
 #include <psprecomp/mem.h>
 #include <psprecomp/net.h>
+#include <psprecomp/net_proto.h>
 
 #include <ctype.h>
 #include <stdio.h>
@@ -51,19 +52,17 @@
 
 #define KEEPALIVE_SECS 60
 
-/* Texts the server shows, from the data folder; UTF-8 there, UTF-16LE for the game. */
+/* The Terms of Use and Notices windows: the server's own texts (MSG_S2C_SERVER_TEXT, sent after
+ * the handshake: whoever runs a server decides what they say); from a server that sends none,
+ * the file in the data folder; else a placeholder. UTF-8 there, UTF-16LE for the game. */
 typedef struct { const char *file; char *utf16; size_t len; } infra_text;
 static infra_text g_terms   = { "terms_of_use.txt", NULL, 0 };   /* the Terms of Use window */
 static infra_text g_notices = { "notices.txt", NULL, 0 };        /* the Notices window */
 
-static void load_text(const char *base, infra_text *t) {
-    char path[1200];
-    snprintf(path, sizeof path, "%s/%s", base, t->file);
-    FILE *f = fopen(path, "rb");
-    if (!f) { psp_net_log("infra: %s not found; a placeholder is shown", path); return; }
-    static unsigned char raw[16384];
-    const size_t got = fread(raw, 1, sizeof raw, f);
-    fclose(f);
+/* UTF-8 -> UTF-16LE into t (lines end with \n; \r, a BOM and characters outside the BMP dropped). */
+static void set_text(infra_text *t, const unsigned char *raw, size_t got) {
+    free(t->utf16);
+    t->utf16 = NULL; t->len = 0;
     t->utf16 = (char *)malloc(got * 2 + 2);
     if (!t->utf16) return;
     size_t o = 0;
@@ -76,7 +75,28 @@ static void load_text(const char *base, infra_text *t) {
         t->utf16[o++] = (char)(c & 0xFF); t->utf16[o++] = (char)(c >> 8);
     }
     t->len = o;
-    psp_net_log("infra: %s (%u characters)", path, (unsigned)(o / 2));
+}
+
+static void load_text(const char *base, infra_text *t) {
+    char path[1200];
+    snprintf(path, sizeof path, "%s/%s", base, t->file);
+    FILE *f = fopen(path, "rb");
+    if (!f) return;                                       /* the server's text, or a placeholder */
+    static unsigned char raw[16384];
+    const size_t got = fread(raw, 1, sizeof raw, f);
+    fclose(f);
+    set_text(t, raw, got);
+    psp_net_log("infra: %s (%u characters), shown if the server sends none", path, (unsigned)(t->len / 2));
+}
+
+/* The server's text of this kind, if it sent one, replaces the local one. */
+static void take_server_text(infra_text *t, int kind) {
+    const char *text;
+    uint32_t len;
+    if (psp_net_mmo_server_text(kind, &text, &len) == 1) {
+        set_text(t, (const unsigned char *)text, len);
+        psp_net_log("infra: %s: the server's (%u characters)", t->file, (unsigned)(t->len / 2));
+    }
 }
 
 /* A raw text reply (no packet header): UTF-16LE ending with a 0 character. */
@@ -194,10 +214,16 @@ static int infra_send(const psp_http_request *req, psp_http_response *resp) {
     hexlog("request", b, req->body_len);
     const uint8_t sub = b[5];
     /* Requests answered with a raw body (no packet): they come alone. */
-    if (sub == SUB_TERMS)          /* the request carries the NP ticket (+12 length, +16 ticket) */
+    if (sub == SUB_TERMS) {        /* the request carries the NP ticket (+12 length, +16 ticket) */
+        psp_net_mmo_wait_texts(1500);       /* the first contact: join the server, take its texts */
+        take_server_text(&g_terms, PSP_MMO_TEXT_TERMS);
+        take_server_text(&g_notices, PSP_MMO_TEXT_NOTICES);
         return text_reply(resp, &g_terms, "No terms of use are set for this server.");
-    if (sub == SUB_NEWS)
+    }
+    if (sub == SUB_NEWS) {
+        take_server_text(&g_notices, PSP_MMO_TEXT_NOTICES);
         return text_reply(resp, &g_notices, "No notices.");
+    }
     if (sub == SUB_RAW_0x18 || sub == SUB_NEWS_PAGE) {
         /* 0x18: after the notices, meaning unknown (a packet here made the game read through
          * a null pointer). 0x19: news item +12 u32 index from 1, stored by 0x089976C4; the

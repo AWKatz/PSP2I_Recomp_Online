@@ -149,6 +149,28 @@ static void send_ack(srv *s, uint64_t id, uint32_t status) {
     t->send_packet(t->ctx, &to, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, ack, sizeof ack);
 }
 
+/* The Terms of Use and Notices the game shows on the way in: the server's own, so whoever runs
+ * it decides what they say. Read at each join (an edit applies to the next player). A missing
+ * file sends 0 parts: the client then shows its own file, or a placeholder. */
+static void send_text(srv *s, uint64_t id, uint8_t kind, const char *path) {
+    static uint8_t text[PSP_MMO_TEXT_MAX];
+    size_t n = 0;
+    FILE *f = path && *path ? fopen(path, "rb") : NULL;
+    if (f) { n = fread(text, 1, sizeof text, f); fclose(f); }
+    const unsigned parts = (unsigned)((n + PSP_MMO_TEXT_CHUNK - 1) / PSP_MMO_TEXT_CHUNK);
+    const psp_net_transport *t = psp_net_enet_transport(s->enet);
+    const psp_net_peer to = { { 0 }, id };
+    uint8_t m[PSP_MMO_TEXT_HDR_LEN + PSP_MMO_TEXT_CHUNK];
+    for (unsigned k = 0; k == 0 || k < parts; k++) {
+        const size_t off = (size_t)k * PSP_MMO_TEXT_CHUNK, len = parts ? (n - off < PSP_MMO_TEXT_CHUNK ? n - off : PSP_MMO_TEXT_CHUNK) : 0;
+        psp_mmo_put_hdr(m, MSG_S2C_SERVER_TEXT);
+        m[8] = kind; m[9] = (uint8_t)k; m[10] = (uint8_t)parts; m[11] = 0;
+        psp_mmo_put_u16(m + 12, (uint16_t)len);
+        if (len) memcpy(m + PSP_MMO_TEXT_HDR_LEN, text + off, len);
+        t->send_packet(t->ctx, &to, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, m, (uint32_t)(PSP_MMO_TEXT_HDR_LEN + len));
+    }
+}
+
 static void send_events(srv *s, uint64_t id) {
     uint8_t m[PSP_MMO_EVENTS_LEN];
     psp_mmo_put_hdr(m, MSG_S2C_SERVER_EVENTS);
@@ -208,6 +230,8 @@ static void on_handshake(srv *s, session *ss, const psp_net_packet *p) {
     psp_net_enet_authorize(s->enet, ss->id, 1);
     send_ack(s, ss->id, PSP_MMO_OK);
     send_events(s, ss->id);
+    send_text(s, ss->id, PSP_MMO_TEXT_TERMS, s->cfg.terms_path);
+    send_text(s, ss->id, PSP_MMO_TEXT_NOTICES, s->cfg.notices_path);
     s->st.handshakes_ok++;
     slog(s, "player '%s' joined: session %llu, mac %02X:%02X:%02X:%02X:%02X:%02X, %s (%d/%d)", name,
          (unsigned long long)ss->id, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], addr, count(s, SS_ACTIVE), s->cfg.max_players);

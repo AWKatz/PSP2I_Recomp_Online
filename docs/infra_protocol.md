@@ -29,9 +29,9 @@ Replies are dispatched by `ExecCom` (`0x08A6B08C`) through the table at `0x08E38
 | Request sub | What | Reply |
 | --- | --- | --- |
 | `0x80` | front: server status. Payload has a version string such as `06:29:1` | sub `0x81`, `RcvInfraServerStatus`. 16 bytes of `sInfraServerInfo`: +0 s8 state (0 open; 1 gives error 4004, 2 gives error 4003), +2 s16 keep-alive seconds |
-| `0x10` | Terms of Use. Carries the NP ticket (+12 u32 length, +16 ticket) | raw body: UTF-16LE text, ending with a 0 character, shown as is. Ours comes from `terms_of_use.txt` |
+| `0x10` | Terms of Use. Carries the NP ticket (+12 u32 length, +16 ticket) | raw body: UTF-16LE text, ending with a 0 character, shown as is. Ours is the server's (`server/config/terms_of_use.txt`, sent after the handshake as `MSG_S2C_SERVER_TEXT`); from a server that sends none, `terms_of_use.txt` in the game folder |
 | `0x0E` | patch file | sub `0x0E`, `RcvInfraPatchFile`: +12 u32, nonzero means there's a patch to fetch. Ours: 0 |
-| `0x0F` | news | raw body: UTF-16LE text for the Notices window (parsed by `0x0888FBB0`). Ours comes from `notices.txt` |
+| `0x0F` | news | raw body: UTF-16LE text for the Notices window (parsed by `0x0888FBB0`). Ours is the server's (`server/config/notices.txt`), the same way |
 | `0x19` | news item, +12 u32 index from 1 | raw body, stored per index (`0x089976C4`). The game asks for the next index until a reply is **empty**. Ours: empty |
 | `0x18` | after the notices; meaning unknown | raw body. A packet here caused a null read. Ours: empty |
 | `0x14` | server load rates (`ServerNumRate`, 5 values) | sub `0x14`. Ours: zeros |

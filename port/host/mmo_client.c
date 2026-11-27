@@ -5,6 +5,8 @@
  *   server_ip     = "127.0.0.1"   # the server to join
  *   server_port   = 29001
  *   lan_discovery = true          # look for a server on the LAN when server_ip is unset
+ *   try_local_first = false       # with server_ip set: look for a server on this machine / the
+ *                                 # LAN first (a short discovery probe), else join server_ip
  *   discovery_port = 29000        # where LAN servers answer (psp2i_server --lan)
  *   player_name   = "Ann"         # sent in the handshake
  *   party_finder  = true          # open the party finder at the Matching Counter (F2 any time)
@@ -42,6 +44,7 @@ void mmo_client_init(const char *base) {
     const char *ip = toml_get_str(&doc, "server_ip", "");
     long long port = toml_get_int(&doc, "server_port", DEFAULT_PORT);
     const int lan = toml_get_bool(&doc, "lan_discovery", 1);
+    const int local_first = toml_get_bool(&doc, "try_local_first", 0);
     long long dport = toml_get_int(&doc, "discovery_port", PSP_MMO_LAN_PORT);
     const char *name = toml_get_str(&doc, "player_name", "PSP2i");
     infra_init(base, name);
@@ -49,10 +52,13 @@ void mmo_client_init(const char *base) {
     lobby_init();
     if (port < 1 || port > 65535) { psp_net_log("mmo: server_port %lld out of range, using %d", port, DEFAULT_PORT); port = DEFAULT_PORT; }
     char found[64];
-    if (!*ip && lan) {
+    /* Discovery: with no server_ip (lan_discovery), or before a set one (try_local_first). The
+     * probe goes to the LAN's broadcast address and to this machine. */
+    if ((!*ip && lan) || (*ip && local_first)) {
         if (dport < 1 || dport > 65535) dport = PSP_MMO_LAN_PORT;
         psp_mmo_lan_info info;
-        if (psp_mmo_lan_discover((uint16_t)dport, 1500, &info, found, sizeof found) == 0) {
+        if (*ip) psp_net_log("mmo: try_local_first: looking for a server on this machine or the LAN before %s", ip);
+        if (psp_mmo_lan_discover((uint16_t)dport, *ip ? 700 : 1500, &info, found, sizeof found) == 0) {
             if (info.version_hash != psp_mmo_fnv1a(PSP_MMO_VERSION_STRING)) {
                 psp_net_log("mmo: LAN server '%s' at %s has version hash %08X, not ours (%08X, %s); ignoring it",
                             info.name, found, (unsigned)info.version_hash,
@@ -64,7 +70,7 @@ void mmo_client_init(const char *base) {
                 port = info.game_port;
             }
         } else {
-            psp_net_log("mmo: no LAN server answered on udp %lld", dport);
+            psp_net_log("mmo: no LAN server answered on udp %lld%s", dport, *ip ? "; joining server_ip" : "");
         }
     }
     if (!*ip) {
@@ -72,7 +78,8 @@ void mmo_client_init(const char *base) {
         psp_net_log("mmo: no server_ip, using %s", ip);
     }
     snprintf(server, sizeof server, "%s:%lld", ip, port);
-    psp_net_log("mmo: server_ip %s, server_port %lld, lan_discovery %s, player_name '%s'", ip, port, lan ? "true" : "false", name);
+    psp_net_log("mmo: server_ip %s, server_port %lld, lan_discovery %s, try_local_first %s, player_name '%s'", ip, port,
+                lan ? "true" : "false", local_first ? "true" : "false", name);
 
     psp_net_mmo_config mc = { server, name, "psp2i-mmo " __DATE__ };
     psp_net_mmo_configure(&mc);

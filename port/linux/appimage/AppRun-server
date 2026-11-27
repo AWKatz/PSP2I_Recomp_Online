@@ -1,7 +1,7 @@
 #!/bin/sh
 # AppImage entry point for the dedicated server. It runs in a data folder holding its
-# database and config/ (drop_tables.json, rates.toml; the defaults are copied in on
-# first run):
+# database and config/ (drop_tables.json, rates.toml, terms_of_use.txt, notices.txt; the
+# defaults are copied in on first run):
 #   $PSP2I_SERVER_DATA, if set;
 #   else the folder holding the .AppImage (build/PSP2i_Linux/server).
 # Arguments go to the server as they are, e.g. --lan, --port, --max-players.

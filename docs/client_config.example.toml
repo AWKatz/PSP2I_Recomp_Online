@@ -9,5 +9,9 @@ server_port    = 29001
 lan_discovery  = true
 discovery_port = 29000
 
+# With server_ip set: first look for a server on this machine or the LAN (a short discovery
+# probe, about 0.7 s) and join it if one answers with the same version hash; else join server_ip.
+try_local_first = false
+
 # Sent in the handshake: printable UTF-8, at most 31 bytes.
 player_name    = "Tester"

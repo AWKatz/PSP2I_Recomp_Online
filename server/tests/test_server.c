@@ -71,6 +71,9 @@ typedef struct {
     char party_leader[33];
     int warps;
     int32_t warp_dest;
+    int texts;                  /* MSG_S2C_SERVER_TEXT messages */
+    char terms[64];             /* the terms text, if one part arrived */
+    int notices_parts;          /* -1 until the notices message arrives */
 } client;
 
 static void cl_rx(const psp_net_packet *p, void *u) {
@@ -99,6 +102,11 @@ static void cl_rx(const psp_net_packet *p, void *u) {
     } else if (p->port == PSP_MMO_CTRL_PORT && psp_mmo_type(p->data, p->len) == MSG_S2C_PARTY_WARP && p->len == PSP_MMO_PARTY_WARP_LEN) {
         c->warps++;
         c->warp_dest = (int32_t)psp_mmo_get_u32(p->data + 8);
+    } else if (p->port == PSP_MMO_CTRL_PORT && psp_mmo_type(p->data, p->len) == MSG_S2C_SERVER_TEXT && p->len >= PSP_MMO_TEXT_HDR_LEN) {
+        c->texts++;
+        const uint32_t n = psp_mmo_get_u16(p->data + 12);
+        if (p->data[8] == PSP_MMO_TEXT_TERMS && n < sizeof c->terms) { memcpy(c->terms, p->data + PSP_MMO_TEXT_HDR_LEN, n); c->terms[n] = 0; }
+        if (p->data[8] == PSP_MMO_TEXT_NOTICES) c->notices_parts = p->data[10];
     } else if (p->port != PSP_MMO_CTRL_PORT) {
         c->game_rx++;
     }
@@ -110,6 +118,7 @@ static void cl_pump(client *c, unsigned ms) {
 }
 static int cl_join(client *c, uint16_t port, uint8_t mac_last) {
     memset(c, 0, sizeof *c);
+    c->notices_parts = -1;
     psp_net_enet_config cfg = { .connect_timeout_ms = 3000 };
     c->e = psp_net_enet_create(&cfg);
     const psp_net_transport *t = psp_net_enet_transport(c->e);
@@ -219,8 +228,12 @@ int main(void) {
     CHECK(check(multi, "Ann", 0) == PSP_MMO_ERR_MAC);
 
     /* ---- LAN mode ---- */
+    char tpath[256];                                  /* the Terms of Use the server sends; no notices file */
+    snprintf(tpath, sizeof tpath, "%s/psp2i_terms_%d.txt", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp", (int)getpid());
+    write_file(tpath, "Be kind.");
     srv_config lc = { .mode = SRV_MODE_LAN, .bind = "127.0.0.1", .port = 0, .lan_port = 0, .name = "Test LAN",
-                      .max_players = 8, .handshake_timeout_ms = 400, .log = getenv("TEST_SERVER_LOG") ? loud : quiet };
+                      .max_players = 8, .handshake_timeout_ms = 400, .log = getenv("TEST_SERVER_LOG") ? loud : quiet,
+                      .terms_path = tpath, .notices_path = "/nonexistent/notices.txt" };
     srv_thread lt;
     srv_go(&lt, &lc);
     const uint16_t port = srv_port(lt.s), lan_port = srv_lan_port(lt.s);
@@ -236,6 +249,9 @@ int main(void) {
     CHECK(cl_join(&a, port, 0xA));
     cl_handshake(&a, 0xA, "Ann");
     CHECK(a.acked && a.status == PSP_MMO_OK && a.session == psp_net_enet_self_id(a.e));
+    for (int i = 0; i < 100 && a.texts < 2; i++) cl_pump(&a, 10);
+    CHECK(a.texts == 2 && strcmp(a.terms, "Be kind.") == 0 && a.notices_parts == 0);   /* the file's text; none */
+    remove(tpath);
     CHECK(psp_mmo_lan_discover(lan_port, 1000, &info, ip, sizeof ip) == 0 && info.players == 1);
 
     CHECK(cl_join(&b, port, 0xB));                  /* pending: its broadcast is not relayed */

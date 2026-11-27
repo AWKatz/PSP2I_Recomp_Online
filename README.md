@@ -54,12 +54,12 @@ PSP2i_<system>/                 PSP2i_macOS, PSP2i_Linux or PSP2i_Windows
   NPJH50332/                    your save folder: copy PPSSPP's memstick/PSP/SAVEDATA/NPJH50332 here to continue
   psp2i.ini                     optional settings (see below); created when you change one in game
   client_config.toml            optional: which server to join (found on the LAN by default)
-  terms_of_use.txt, notices.txt server owners: the texts shown when players connect
   TEXTURES/NPJH50332/           optional: an HD texture pack made for PPSSPP
   logs/                         created on first run
   server/                       the dedicated server, self-contained too
     psp2i_server                (psp2i_server.exe on Windows, the server AppImage on Linux)
-    config/                     loot tables and rates (drop_tables.json, rates.toml)
+    config/                     loot tables and rates (drop_tables.json, rates.toml), and the texts
+                                players see when they connect (terms_of_use.txt, notices.txt)
                                 its database is created here on first run
 ```
 
@@ -138,6 +138,8 @@ cd build/PSP2i_macOS/server && ./psp2i_server --lan    # run it where config/ is
 | `--db PATH` | psp2i_server.db | the SQLite database (accounts, characters, drops, audit log) |
 | `--drop-tables PATH` | config/drop_tables.json | loot tables |
 | `--rates PATH` | config/rates.toml | rate multipliers |
+| `--terms PATH` | config/terms_of_use.txt | the Terms of Use players see when they connect (read at each join) |
+| `--notices PATH` | config/notices.txt | the Notices players see after them (read at each join) |
 | `--tick-rate N` | 60 | server ticks per second (10–120); 60 matches the clients' 60 fps. Game traffic is relayed as it arrives, between ticks too |
 | `--stats S` | 60 | print a status line every S seconds (0 = off) |
 | `--run-seconds S` | off | exit after S seconds |
@@ -197,11 +199,13 @@ Config files:
   - `server_ip`: leave it out to find a LAN server;
   - `server_port` (29001);
   - `lan_discovery` (true);
+  - `try_local_first` (false): with `server_ip` set, first look for a server on this machine or the LAN (a short discovery probe) and join it if one answers; else join `server_ip`;
   - `discovery_port` (29000);
   - `player_name`;
   - `party_finder` (true): open the party finder at the Matching Counter.
-- **`terms_of_use.txt`** (with your game files): plain UTF-8 text shown in the game's Terms of Use window when a player connects in Internet Multi Mode. Edit it to set your server's rules; the window wraps long lines on its own. Without the file a one-line placeholder is shown.
-- **`notices.txt`** (with your game files): the same, for the Notices window that follows the Terms of Use (server news).
+- **`server/config/terms_of_use.txt`** (with the server): plain UTF-8 text shown in the game's Terms of Use window when a player connects in Internet Multi Mode. Whoever runs the server edits it to set its rules; the server reads it at each join, so a change applies to the next player. The window wraps long lines on its own.
+- **`server/config/notices.txt`** (with the server): the same, for the Notices window that follows the Terms of Use (server news).
+- From a server that sends none (an older server, or the file missing), the client shows a `terms_of_use.txt` / `notices.txt` next to the game files if there is one, else a one-line placeholder.
 
 **Party finder.** In Multi Mode, the Matching Counter opens a panel listing the parties being hosted on the server (leader, members, free slots), plus START A PARTY and CHOOSE MYSELF. Pick a party and the client joins it for you: it presses Join Party, shows the game only that leader's party, and confirms. START A PARTY presses Form Party; Begin Party Play stays with the leader. F2 (keyboard) or L3 (controller) opens and closes the panel. In the panel:
 

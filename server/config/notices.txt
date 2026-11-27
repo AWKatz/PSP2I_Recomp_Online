@@ -1,0 +1,5 @@
+Server news
+
+Welcome to PSP2i Online, running on a community server.
+
+The server host can change this page: edit config/notices.txt next to psp2i_server.

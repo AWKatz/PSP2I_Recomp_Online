@@ -74,6 +74,8 @@ static void usage(void) {
          "  --db PATH              the database (default psp2i_server.db; SQLite, WAL)\n"
          "  --drop-tables PATH     loot tables, JSON (default config/drop_tables.json; reloaded on change)\n"
          "  --rates PATH           rate multipliers, TOML (default config/rates.toml; reloaded on change)\n"
+         "  --terms PATH           the Terms of Use players see, UTF-8 (default config/terms_of_use.txt; read at each join)\n"
+         "  --notices PATH         the Notices players see, UTF-8 (default config/notices.txt; read at each join)\n"
          "  --kill-limit N         enemy kill reports per second per player (default 10)\n"
          "  --web-port N           serve the admin panel on this TCP port (off by default)\n"
          "  --web-bind ADDR        the panel's address (default 127.0.0.1: this machine only)\n"
@@ -109,6 +111,8 @@ int main(int argc, char **argv) {
     int use_console = 1;
     cfg.drop_tables_path = "config/drop_tables.json";
     cfg.rates_path = "config/rates.toml";
+    cfg.terms_path = "config/terms_of_use.txt";
+    cfg.notices_path = "config/notices.txt";
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (!strcmp(a, "--lan") || !strcmp(a, "--online")) {
@@ -130,6 +134,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--db")) { i = need(i, argc, a); db_path = argv[i]; }
         else if (!strcmp(a, "--drop-tables")) { i = need(i, argc, a); cfg.drop_tables_path = argv[i]; }
         else if (!strcmp(a, "--rates")) { i = need(i, argc, a); cfg.rates_path = argv[i]; }
+        else if (!strcmp(a, "--terms")) { i = need(i, argc, a); cfg.terms_path = argv[i]; }
+        else if (!strcmp(a, "--notices")) { i = need(i, argc, a); cfg.notices_path = argv[i]; }
         else if (!strcmp(a, "--kill-limit")) { i = need(i, argc, a); cfg.kills_per_sec = (uint32_t)num(argv[i], a, 1, 1000); }
         else if (!strcmp(a, "--web-port")) { i = need(i, argc, a); web_port = num(argv[i], a, 0, 65535); }
         else if (!strcmp(a, "--web-bind")) { i = need(i, argc, a); web_bind = argv[i]; }

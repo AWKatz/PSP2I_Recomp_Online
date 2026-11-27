@@ -21,6 +21,12 @@
 
 #include <stdio.h>
 #include <string.h>
+#ifdef _WIN32
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
+#else
+#  include <time.h>
+#endif
 
 static char g_server[128] = "127.0.0.1:29001";
 static char g_name[PSP_MMO_NAME_LEN] = "PSP2i";
@@ -59,7 +65,60 @@ static int g_party_role, g_party_members, g_party_max, g_party_open;
 static uint8_t g_party_leader[6];
 static void party_send(void);
 
+/* ---- the server's texts (Terms of Use, Notices) --------------------------------------------- */
+
+typedef struct { int state; uint8_t parts, got; uint32_t len; char data[PSP_MMO_TEXT_MAX]; } server_text;   /* state: 0 not arrived, 1 none, 2 have */
+static server_text g_text[2];
+
+static void texts_reset(void) { for (int k = 0; k < 2; k++) { g_text[k].state = 0; g_text[k].parts = g_text[k].got = 0; g_text[k].len = 0; } }
+
+static void on_server_text(const uint8_t *m, uint32_t len) {
+    if (len < PSP_MMO_TEXT_HDR_LEN) return;
+    const int kind = m[8], part = m[9], parts = m[10];
+    const uint32_t size = psp_mmo_get_u16(m + 12);
+    if ((kind != PSP_MMO_TEXT_TERMS && kind != PSP_MMO_TEXT_NOTICES) || PSP_MMO_TEXT_HDR_LEN + size > len) return;
+    server_text *t = &g_text[kind - 1];
+    if (parts == 0) { t->state = 1; psp_net_log("mmo: the server has no %s text", kind == 1 ? "terms" : "notices"); return; }
+    if (part == 0) { t->len = 0; t->got = 0; t->parts = (uint8_t)parts; t->state = 0; }
+    if (part != t->got || t->len + size > sizeof t->data) return;          /* out of order: ignored */
+    memcpy(t->data + t->len, m + PSP_MMO_TEXT_HDR_LEN, size);
+    t->len += size;
+    if (++t->got == t->parts) {
+        t->state = 2;
+        psp_net_log("mmo: the server's %s text: %u bytes", kind == 1 ? "terms" : "notices", (unsigned)t->len);
+    }
+}
+
+int psp_net_mmo_server_text(int kind, const char **text, uint32_t *len) {
+    if (kind != PSP_MMO_TEXT_TERMS && kind != PSP_MMO_TEXT_NOTICES) return -1;
+    const server_text *t = &g_text[kind - 1];
+    if (t->state == 2) { if (text) *text = t->data; if (len) *len = t->len; }
+    return t->state - 1;
+}
+
+static void sleep_ms(unsigned ms) {
+#ifdef _WIN32
+    Sleep(ms);
+#else
+    struct timespec ts = { 0, (long)ms * 1000000L };
+    nanosleep(&ts, NULL);
+#endif
+}
+
+static void poll_server(void);
+void psp_net_mmo_wait_texts(unsigned timeout_ms) {
+    if (!psp_net_mmo_connected() && psp_net_mmo_connect() != 0) return;
+    for (unsigned waited = 0; waited < timeout_ms; waited += 10) {
+        poll_server();
+        if (g_text[0].state && g_text[1].state) return;
+        if (!psp_net_mmo_connected()) return;
+        sleep_ms(10);
+    }
+    psp_net_log("mmo: the server sent no texts within %u ms (an older server?)", timeout_ms);
+}
+
 static int mmo_connect(void) {
+    texts_reset();
     const psp_net_transport *t = psp_net_get_transport();
     if (t == psp_net_null_transport()) { psp_net_log("mmo: no transport installed"); return -1; }
     uint8_t mac[6];
@@ -350,6 +409,8 @@ static void on_packet(const psp_net_packet *p, void *user) {
         uint64_t sid = 0; for (int i = 7; i >= 0; i--) sid = (sid << 8) | d[4 + i];
         g_session = sid;
         psp_net_log("mmo: MSG_S2C_HANDSHAKE_ACK status %u, session %llu", status, (unsigned long long)sid);
+    } else if (type == MSG_S2C_SERVER_TEXT) {
+        on_server_text(p->data, p->len);
     } else if (type >= MSG_S2C_NP2_REPLY && type <= MSG_S2C_NP2_ROOM_MSG) {
         mmo_matching2_on_packet(p->data, p->len);
     } else if (type == MSG_S2C_PARTY_LIST) {

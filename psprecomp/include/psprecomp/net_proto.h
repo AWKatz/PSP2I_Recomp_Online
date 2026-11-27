@@ -25,6 +25,7 @@ enum {
     MSG_S2C_KILL_REWARD   = 0x8011,   /* to the killer: experience and type points */
     MSG_S2C_SYSTEM_NOTICE = 0x8020,   /* an announcement for every player's HUD */
     MSG_S2C_SERVER_EVENTS = 0x8021,   /* the active seasonal events / lobby themes */
+    MSG_S2C_SERVER_TEXT   = 0x8022,   /* the server's Terms of Use / Notices text, in parts */
     MSG_C2S_PARTY_STATE   = 0x0030,   /* my party role (Multi Mode), whenever it changes */
     MSG_C2S_PARTY_LIST_REQ = 0x0031,  /* send me the party directory */
     MSG_S2C_PARTY_LIST    = 0x8030,   /* the party directory: every party a leader is hosting */
@@ -100,6 +101,12 @@ static inline uint64_t psp_mmo_get_u64(const uint8_t *b) { uint64_t v = 0; for (
 /* MSG_S2C_SYSTEM_NOTICE: hdr, colour u32 (0xRRGGBB), text[128] (UTF-8, NUL-padded) */
 enum { PSP_MMO_NOTICE_TEXT_LEN = 128, PSP_MMO_NOTICE_LEN = 8 + 4 + PSP_MMO_NOTICE_TEXT_LEN };
 /* MSG_S2C_SERVER_EVENTS: hdr, active event bits u32 (bit i = the server's event i) */
+/* MSG_S2C_SERVER_TEXT: hdr, kind u8 (PSP_MMO_TEXT_*), part u8 (from 0), parts u8, reserved u8,
+ * size u16, UTF-8 text (at most PSP_MMO_TEXT_CHUNK bytes). Sent after a successful handshake:
+ * the parts of one text, in order, joined, are the whole text (at most PSP_MMO_TEXT_MAX bytes;
+ * 0 parts = the server has none, and the client shows its own). */
+enum { PSP_MMO_TEXT_TERMS = 1, PSP_MMO_TEXT_NOTICES = 2,
+       PSP_MMO_TEXT_HDR_LEN = 8 + 6, PSP_MMO_TEXT_CHUNK = 1800, PSP_MMO_TEXT_MAX = 16384 };
 enum { PSP_MMO_EVENTS_LEN = 8 + 4 };
 
 /* MSG_C2S_ENEMY_KILLED: hdr, enemy id u32, mission id u32, x/y/z f32 */
