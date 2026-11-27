@@ -148,6 +148,7 @@ cd build/PSP2i_macOS/server && ./psp2i_server --lan    # run it where config/ is
 | `--help` | | |
 
 Web admin panel:
+<img width="1201" height="892" alt="Screenshot 2026-11-24 at 9 34 53 PM" src="https://github.com/user-attachments/assets/811d34bb-8437-45c8-8c14-cbd6d84361de" />
 - Run `psp2i_server --add-admin NAME PASSWORD` once, then start the server with `--web-port 8080` and open http://127.0.0.1:8080/.
 - From the panel you can:
   - watch live telemetry and the player list;
