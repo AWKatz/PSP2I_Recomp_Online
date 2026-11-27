@@ -50,7 +50,6 @@ typedef struct {
      * of the message): replayed to a player who joins later (room_replay). */
     struct { uint32_t category; uint16_t size; uint8_t data[PSP_MMO_NP2_MSG_MAX]; } said[8];
     int      nsaid;
-    int      replay_due;   /* joined: the others' messages go to it once it speaks itself */
 } session;
 
 /* An Internet Multi Mode room: a 12-player lobby room or a party room. */
@@ -359,7 +358,6 @@ static void room_leave(srv *s, session *ss) {
 static void room_enter(srv *s, session *ss, int r) {
     room_leave(s, ss);
     ss->nsaid = 0;
-    ss->replay_due = 0;
     ss->room = r;
     ss->member_id = ++s->rooms[r].next_member;
 }
@@ -408,13 +406,14 @@ static void on_np2_create(srv *s, session *ss, const psp_net_packet *p) {
  * own character data (a 228-byte room message) once, when they enter -- the room's owner when it
  * creates it, to nobody -- and on a PSP's servers a late joiner still got it: without it the
  * joiner had the owner's movement packets but no character to move, and never saw the owner. */
-static void room_replay(srv *s, session *ss) {
+static void room_replay(srv *s, session *ss, uint32_t category) {
     static uint8_t m[20 + PSP_MMO_NP2_MSG_MAX];
     int n = 0;
     for (int i = 0; i < MAX_SESSIONS; i++) {
         const session *o = &s->sess[i];
         if (o->state != SS_ACTIVE || o->room != ss->room || o == ss) continue;
         for (int k = 0; k < o->nsaid; k++) {
+            if (o->said[k].category != category) continue;
             psp_mmo_put_hdr(m, MSG_S2C_NP2_ROOM_MSG);
             psp_mmo_put_u64(m + 8, s->rooms[ss->room].id);
             psp_mmo_put_u16(m + 16, o->member_id);
@@ -424,7 +423,7 @@ static void room_replay(srv *s, session *ss) {
             n++;
         }
     }
-    if (n) slog(s, "rooms: replayed %d earlier room message(s) to '%s'", n, ss->name);
+    if (n) slog(s, "rooms: '%s' asked for the others' character data: sent %d", ss->name, n);
 }
 
 static void on_np2_join(srv *s, session *ss, const psp_net_packet *p) {
@@ -439,7 +438,6 @@ static void on_np2_join(srv *s, session *ss, const psp_net_packet *p) {
     slog(s, "rooms: '%s' joined room %llu (%d/%u)", ss->name, (unsigned long long)id, room_members(s, r), (unsigned)s->rooms[r].max);
     room_joined_reply(s, ss, req);
     room_tell(s, r, ss, 1, ss);
-    ss->replay_due = 1;                               /* room_replay: after the owner's welcome */
 }
 
 static void on_np2_leave(srv *s, session *ss, const psp_net_packet *p) {
@@ -516,6 +514,11 @@ static void on_np2_set_ext(srv *s, session *ss, const psp_net_packet *p) {
     rm->attrs_len = (uint16_t)n;
 }
 
+/* Room message categories (the message's first u32), as the game names them in its log. */
+#define ROOM_CAT_LOBBY_PACKET 4   /* a player's character data, sent once on entering */
+#define ROOM_CAT_CHARA_REQ    5   /* sendRoomMessageCharaInfoReq: send me your character data */
+static void room_replay(srv *s, session *ss, uint32_t category);
+
 /* A room message: relayed to every other member, or to one. */
 static void on_np2_room_msg(srv *s, session *ss, const psp_net_packet *p) {
     if (p->len < 20 || ss->room < 0) return;
@@ -527,10 +530,6 @@ static void on_np2_room_msg(srv *s, session *ss, const psp_net_packet *p) {
     psp_mmo_put_u16(m + 16, ss->member_id);
     psp_mmo_put_u16(m + 18, size);
     memcpy(m + 20, p->data + 20, size);
-    /* A joiner's first broadcast comes once its game has taken the owner's welcome (room messages
-     * of categories 1, 3, 6): now it can take the others' character data. Sent before that,
-     * straight after the join, the game dropped it. */
-    if (ss->replay_due) { ss->replay_due = 0; room_replay(s, ss); }
     if (!to && size >= 4) {                           /* a broadcast: kept for players who join later */
         const uint32_t cat = psp_mmo_get_u32(p->data + 20);
         int k = 0;
@@ -543,6 +542,11 @@ static void on_np2_room_msg(srv *s, session *ss, const psp_net_packet *p) {
         if (o->state != SS_ACTIVE || o->room != ss->room || o == ss || (to && o->member_id != to)) continue;
         send_to(s, o->id, m, 20u + size);
     }
+    /* Category 5 is the game's chara-info request (sendRoomMessageCharaInfoReq), sent once its own
+     * lobby player exists; the others' character data is their category 4 "lobby packet", which
+     * each sent once on entering. Answered here with those, so a late joiner sees players already
+     * in the room (sent earlier, the game drops them: "not PadPlayer"). */
+    if (size >= 4 && psp_mmo_get_u32(p->data + 20) == ROOM_CAT_CHARA_REQ) room_replay(s, ss, ROOM_CAT_LOBBY_PACKET);
 }
 
 static void on_peer(void *u, uint64_t id, const uint8_t mac[6], int joined) {
