@@ -24,7 +24,8 @@ file(GLOB GEN_PARTS ${SPLIT_DIR}/recomp_part_*.c)
 set_source_files_properties(${GEN_PARTS} PROPERTIES COMPILE_OPTIONS "-O1;-g0")
 add_executable(psp2i ${PORT}/host/sdl_main.c ${PORT}/host/gl_ge.c ${PORT}/host/postfx.c
     ${PORT}/host/gl_load.c ${PORT}/host/atrac_at3.c ${PORT}/host/camera.c
-    ${PORT}/host/framerate.c ${PORT}/host/menu.c ${PORT}/host/texpack.c ${GEN_PARTS} ${PSP2I_GEN_DIR}/recomp_imports.c)
+    ${PORT}/host/framerate.c ${PORT}/host/menu.c ${PORT}/host/texpack.c
+    ${PORT}/host/gamelog.c ${PORT}/host/logfile.c ${GEN_PARTS} ${PSP2I_GEN_DIR}/recomp_imports.c)
 target_include_directories(psp2i PRIVATE ${PORT}/host ${PSP2I_GEN_DIR} ${SPLIT_DIR}
     ${PORT}/third_party/xxhash ${PORT}/third_party/stb)
 option(PSP2I_TRACE "Build the generated code with function-entry tracing (area traces: PSP2I_TRACE_AREAS=1)" OFF)

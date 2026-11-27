@@ -66,6 +66,7 @@
 #include "menu.h"
 #include "savecrypt.h"
 #include "texpack.h"
+#include "gamelog.h"
 #ifdef PSPRECOMP_MMO_NET
 #include "mmo_client.h"
 #include "lobby.h"
@@ -1226,6 +1227,10 @@ int main(int argc, char **argv) {
     psp_io_set_save_dir(g_base, "NPJH50332");               /* the save folder: NPJH50332/ in the game folder */
     psp_net_set_log(net_line);
     psp_net_set_forced_off(1);                               /* no online play: the WLAN switch reads off */
+    /* PSP2I_GAMELOG=1: the game's own debug output and the diagnostic hooks (gamelog.c, as the
+     * Windows build always has) to logs/game_log.txt. Off by default here: several hooks also
+     * carry fixes that have not been checked on this host yet. */
+    if (getenv("PSP2I_GAMELOG")) gamelog_init(g_base);
 #ifdef PSPRECOMP_MMO_NET
     mmo_client_init(g_base);                                 /* MMO build: the network back on, through the server */
 #endif
@@ -1278,3 +1283,6 @@ int main(int argc, char **argv) {
     psp_mem_free();
     return rc;
 }
+
+/* gamelog.c names the game functions on the host stack on Windows (DbgHelp); none here. */
+int game_stack(char *out, size_t cap, int max_frames) { (void)cap; (void)max_frames; out[0] = '\0'; return 0; }

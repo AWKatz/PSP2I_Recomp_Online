@@ -536,6 +536,28 @@ static void hook_setdata_cb(void (*original)(void)) {
               (uint32_t)err, f14, s4, psp_read32(m + 4), s8, psp_read32(m + 8));
 }
 
+/* Lobby movement (UDP 3658): which check stops a player sending its own position. Each hook
+ * logs a function's result when it changes (with the caller), so a gate that turns a sender off
+ * shows once, not 30 times a second. 0x08A2594C sends the local player's lobby state; it asks
+ * 0x08A3E520, 0x08A2C0E4 and 0x08A2B940 first; 0x08CB687C sends one packet to a member (0 = all). */
+static void lobby_ret(int k, const char *name, void (*original)(void)) {
+    static uint32_t last[8] = { 0xDEADBEEF, 0xDEADBEEF, 0xDEADBEEF, 0xDEADBEEF, 0xDEADBEEF, 0xDEADBEEF, 0xDEADBEEF, 0xDEADBEEF };
+    static unsigned calls[8];
+    const uint32_t a0 = psp_cpu.r[4], a1 = psp_cpu.r[5], a2 = psp_cpu.r[6], a3 = psp_cpu.r[7], ra = psp_cpu.r[31];
+    original();
+    calls[k]++;
+    const uint32_t v = psp_cpu.r[2];
+    if (v == last[k]) return;
+    last[k] = v;
+    logf_line("[lobby] %s(0x%08X, 0x%08X, 0x%08X, 0x%08X) -> 0x%08X  (call %u, from %08X, vblank %llu)", name, a0, a1, a2, a3, v,
+              calls[k], ra - 8, (unsigned long long)psp_sched_vblank_count());
+}
+static void hook_lobby_send(void (*o)(void))   { lobby_ret(0, "send own state 08A2594C", o); }
+static void hook_lobby_gate1(void (*o)(void))  { lobby_ret(1, "gate 08A3E520", o); }
+static void hook_lobby_gate2(void (*o)(void))  { lobby_ret(2, "gate 08A2C0E4", o); }
+static void hook_lobby_gate3(void (*o)(void))  { lobby_ret(3, "gate 08A2B940", o); }
+static void hook_lobby_p2p(void (*o)(void))    { lobby_ret(4, "p2p send 08CB687C", o); }
+
 /* The character's items arrive in session packet 0x0A08; the client keeps
  * them in *(0x08ED8CEC)+0x58 -- and drops the packet if that object is
  * missing at the time (0x08ABB4D8). The owner is made by the field scene
@@ -876,6 +898,11 @@ void gamelog_init(const char *exe_dir) {
     psp_hook_set(0x08A3DE1Cu, hook_is_local);
     psp_hook_set(0x08CB611Cu, hook_may_charainfo);
     psp_hook_set(0x08CB3E40u, hook_setdata_cb);
+    psp_hook_set(0x08A2594Cu, hook_lobby_send);
+    psp_hook_set(0x08A3E520u, hook_lobby_gate1);
+    psp_hook_set(0x08A2C0E4u, hook_lobby_gate2);
+    psp_hook_set(0x08A2B940u, hook_lobby_gate3);
+    psp_hook_set(0x08CB687Cu, hook_lobby_p2p);
     psp_hook_set(0x08ABB4A8u, hook_items_packet);
     psp_hook_set(0x08ABB3A4u, hook_items_owner_new);
     psp_hook_set(0x08ABBD6Cu, hook_items_owner_del);
