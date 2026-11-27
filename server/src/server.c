@@ -423,7 +423,7 @@ static void room_replay(srv *s, session *ss, uint32_t category) {
             n++;
         }
     }
-    if (n) slog(s, "rooms: '%s' asked for the others' character data: sent %d", ss->name, n);
+    if (n) slog(s, "rooms: '%s' is ready: sent it %d earlier room message(s) of category %u", ss->name, n, (unsigned)category);
 }
 
 static void on_np2_join(srv *s, session *ss, const psp_net_packet *p) {
@@ -546,7 +546,12 @@ static void on_np2_room_msg(srv *s, session *ss, const psp_net_packet *p) {
      * lobby player exists; the others' character data is their category 4 "lobby packet", which
      * each sent once on entering. Answered here with those, so a late joiner sees players already
      * in the room (sent earlier, the game drops them: "not PadPlayer"). */
-    if (size >= 4 && psp_mmo_get_u32(p->data + 20) == ROOM_CAT_CHARA_REQ) room_replay(s, ss, ROOM_CAT_LOBBY_PACKET);
+    /* ... and the others' own requests, sent while this player's game could not answer them yet:
+     * it answers each by broadcasting its character data, which is how the others get it. */
+    if (size >= 4 && psp_mmo_get_u32(p->data + 20) == ROOM_CAT_CHARA_REQ) {
+        room_replay(s, ss, ROOM_CAT_LOBBY_PACKET);
+        room_replay(s, ss, ROOM_CAT_CHARA_REQ);
+    }
 }
 
 static void on_peer(void *u, uint64_t id, const uint8_t mac[6], int joined) {
