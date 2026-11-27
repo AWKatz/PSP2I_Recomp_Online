@@ -24,6 +24,7 @@ Online features at a glance:
 - **Player limits as on the original servers**: Internet Multi Mode lobby rooms hold 12 players and Multi Mode parties hold 4, 1:1 with the original game servers. The server runs several lobby rooms side by side to reach its total.
 - **Your own server**: stands in for the original PSN and SEGA services for up to 12 players, with server-side loot, SQLite persistence and a simple web admin panel.
 
+
 ## Quick Start
 
 You need your own copy of the game: the disc image (`.iso`) and a decrypted `EBOOT.BIN`. The game is built on your machine from your `EBOOT.BIN`, so there are no prebuilt downloads.
@@ -54,12 +55,12 @@ PSP2i_<system>/                 PSP2i_macOS, PSP2i_Linux or PSP2i_Windows
   NPJH50332/                    your save folder: copy PPSSPP's memstick/PSP/SAVEDATA/NPJH50332 here to continue
   psp2i.ini                     optional settings (see below); created when you change one in game
   client_config.toml            optional: which server to join (found on the LAN by default)
+  terms_of_use.txt, notices.txt server owners: the texts shown when players connect
   TEXTURES/NPJH50332/           optional: an HD texture pack made for PPSSPP
   logs/                         created on first run
   server/                       the dedicated server, self-contained too
     psp2i_server                (psp2i_server.exe on Windows, the server AppImage on Linux)
-    config/                     loot tables and rates (drop_tables.json, rates.toml), and the texts
-                                players see when they connect (terms_of_use.txt, notices.txt)
+    config/                     loot tables and rates (drop_tables.json, rates.toml)
                                 its database is created here on first run
 ```
 
@@ -72,6 +73,7 @@ HD textures use PPSSPP's pack format and hashing, so PPSSPP packs work as they a
 - `PSP2I_TEXDUMP=1` writes every texture the pack doesn't replace to `<pack>/new/` (as `<hash>.png`, listed in `new/textures.ini`), which is how packs are made.
 
 Other Windows build scripts: `build_port.bat regen` (regenerates the game code first) and `build_prod.bat` (the community build in `build\prod\`). The older Windows layout, with the extracted disc in `GameData\disc\`, still works; see [port/prod_README.txt](port/prod_README.txt).
+
 
 ### Frame rate and resolution
 
@@ -91,6 +93,7 @@ resolution=1920x1080
 `resolution` applies to the macOS, Linux and Android builds. On Windows the window size is chosen in the settings menu (RESOLUTION), and the internal resolution under GRAPHICS > INTERNAL RES: 1x to 4x the PSP's 480x272, 4x by default, used from the next start (OpenGL only; both kept in `psp2i_display.ini`). HD textures only show their detail above `native`. The settings menu rewrites its own keys in `psp2i.ini` and keeps the others, including `resolution`.
 
 PPSSPP and PSP saves load and save encrypted, so they work in both directions. In-game, Cross confirms.
+
 
 ### Controls
 
@@ -112,6 +115,7 @@ The keyboard uses PPSSPP's default layout. Click the game window first. A gamepa
 | Party finder / lobby menu | F2 | L3 (left stick click) |
 
 This is the Japanese release, so Circle confirms and Cross cancels. On Windows the keys can be rebound in the settings menu (CONTROLS > KEYBOARD/MOUSE).
+
 
 ### Online play and the server
 
@@ -138,8 +142,6 @@ cd build/PSP2i_macOS/server && ./psp2i_server --lan    # run it where config/ is
 | `--db PATH` | psp2i_server.db | the SQLite database (accounts, characters, drops, audit log) |
 | `--drop-tables PATH` | config/drop_tables.json | loot tables |
 | `--rates PATH` | config/rates.toml | rate multipliers |
-| `--terms PATH` | config/terms_of_use.txt | the Terms of Use players see when they connect (read at each join) |
-| `--notices PATH` | config/notices.txt | the Notices players see after them (read at each join) |
 | `--tick-rate N` | 60 | server ticks per second (10–120); 60 matches the clients' 60 fps. Game traffic is relayed as it arrives, between ticks too |
 | `--stats S` | 60 | print a status line every S seconds (0 = off) |
 | `--run-seconds S` | off | exit after S seconds |
@@ -148,6 +150,7 @@ cd build/PSP2i_macOS/server && ./psp2i_server --lan    # run it where config/ is
 | `--no-console` | | don't read commands from stdin |
 | `--add-admin NAME PASS` | | create an admin account and exit |
 | `--help` | | |
+
 
 Web admin panel:
 <img width="1201" height="892" alt="Screenshot 2026-11-24 at 9 34 53 PM" src="https://github.com/user-attachments/assets/811d34bb-8437-45c8-8c14-cbd6d84361de" />
@@ -181,10 +184,12 @@ curl -H "Authorization: Bearer $TOKEN" -d '{"command":"/status"}' http://127.0.0
 | `/audit [text]` | the last 15 audit entries |
 | `/shutdown`, `/help` | |
 
+
 Signals:
 - Ctrl-C or `SIGTERM` shuts the server down and tells every client.
 - `SIGHUP` reloads the config files.
 - Editing a config file also takes effect within a second, without disconnecting anyone.
+
 
 Config files:
 
@@ -199,13 +204,11 @@ Config files:
   - `server_ip`: leave it out to find a LAN server;
   - `server_port` (29001);
   - `lan_discovery` (true);
-  - `try_local_first` (false): with `server_ip` set, first look for a server on this machine or the LAN (a short discovery probe) and join it if one answers; else join `server_ip`;
   - `discovery_port` (29000);
   - `player_name`;
   - `party_finder` (true): open the party finder at the Matching Counter.
-- **`server/config/terms_of_use.txt`** (with the server): plain UTF-8 text shown in the game's Terms of Use window when a player connects in Internet Multi Mode. Whoever runs the server edits it to set its rules; the server reads it at each join, so a change applies to the next player. The window wraps long lines on its own.
-- **`server/config/notices.txt`** (with the server): the same, for the Notices window that follows the Terms of Use (server news).
-- From a server that sends none (an older server, or the file missing), the client shows a `terms_of_use.txt` / `notices.txt` next to the game files if there is one, else a one-line placeholder.
+- **`terms_of_use.txt`** (with your game files): plain UTF-8 text shown in the game's Terms of Use window when a player connects in Internet Multi Mode. Edit it to set your server's rules; the window wraps long lines on its own. Without the file a one-line placeholder is shown.
+- **`notices.txt`** (with your game files): the same, for the Notices window that follows the Terms of Use (server news).
 
 **Party finder.** In Multi Mode, the Matching Counter opens a panel listing the parties being hosted on the server (leader, members, free slots), plus START A PARTY and CHOOSE MYSELF. Pick a party and the client joins it for you: it presses Join Party, shows the game only that leader's party, and confirms. START A PARTY presses Form Party; Begin Party Play stays with the leader. F2 (keyboard) or L3 (controller) opens and closes the panel. In the panel:
 
@@ -240,22 +243,10 @@ If a step doesn't happen in time, the finder hands control back with a notice.
 
 More detail: [server/README.md](server/README.md), [port/linux/README.md](port/linux/README.md), [port/macos/README.md](port/macos/README.md).
 
-## Online roadmap (this fork)
-
-The goal is a standing reproduction of the original online services for small groups, not a larger MMO: limits stay at the original servers' 12 per lobby room and 4 per party.
-
-| Phase | Status |
-| --- | --- |
-| 1. Client networking: isolated network layer, ENet transport, online client entry | done |
-| 2. Dedicated server: headless server, SQLite persistence, server-side loot, web admin | done |
-| 3. Break the 4-player limits | in progress: limits mapped and checked in a live party ([docs/player_limit_offsets.md](docs/player_limit_offsets.md)); party finder. Limits stay 1:1 with the original game servers: 12 players per Internet Multi Mode lobby room, 4 per Multi Mode party. Next: Internet Multi Mode through our server, with several 12-player lobby rooms ([docs/psn_lobby_plan.md](docs/psn_lobby_plan.md)) |
-| 4. Mixed frame rates and the lobby | done: 30 / 60 fps players play together ([docs/mixed_framerate_results.md](docs/mixed_framerate_results.md)); lobby warps and weapons in the lobby ([docs/area_research.md](docs/area_research.md)). Still open: smoothing other players' movement. Saves stay on the player's side (no server-side saves) |
-
-Details are in [docs/net_hle_audit.md](docs/net_hle_audit.md) and [server/README.md](server/README.md). Internet Multi Mode (12-player lobby rooms) is in progress: [docs/psn_lobby_plan.md](docs/psn_lobby_plan.md).
 
 ## AI Disclosure
 
-This project makes **heavy use of AI-assisted development, primarily Claude**, for code analysis, reverse engineering assistance, debugging, implementation, and development tooling.
+This project makes **heavy use of AI-assisted development, primarily Claude**, for code analysis, reverse engineering assistance, debugging.
 
 AI-generated code and suggestions are reviewed, tested, and integrated as part of the development process.
 
@@ -267,43 +258,6 @@ The current goal is to produce a native PC build of the game while maintaining c
 
 This project is based on the output of the PSP recompilation toolchain and ongoing community reverse-engineering efforts.
 
-## Capabilities
-
-Current capabilities include:
-
-* Native Windows, Android, Mac Os executable
-* OpenGL rendering on every platform (Windows can still switch to Direct3D 11 under RENDERER in the settings menu)
-* SDL3 input support
-* Keyboard and controller input
-* Right-stick camera control
-* Save/load functionality
-* Optional 60 FPS mode
-* Original 30 FPS mode
-* Infrastructure handling (Head to [psp2i discord](https://discord.gg/FeGvdBkrGa) for more info)
-* Official website loading
-* Linux and Steam Deck (AppImage; untested so far)
-* HD texture packs in PPSSPP's format (every platform; on Windows with the OpenGL renderer)
-* PPSSPP and PSP saves load and save, encrypted as on hardware
-* **Online (this fork):**
-  * Online play through your own server: Multi Mode (ad hoc) and Internet Multi Mode (the original PSN/SEGA services, reproduced) connect to it over ENet. The server is set in `client_config.toml` or found on the LAN automatically.
-  * Dedicated server `psp2i_server`: headless, 60 Hz tick (`--tick-rate`), no runtime dependencies, about 2–4 MB of RAM.
-  * LAN and online modes, handshake checks, rate limiting, and bans by IP or account.
-  * Embedded SQLite database for accounts, characters and JSON inventories. Trades are crash-safe, so items can't be duplicated.
-  * Loot rolled by the server, with live rate multipliers and drop tables that reload while it runs.
-  * Web admin panel, console and RCON, with an audit log.
-
-> This project is actively being developed. Capabilities and compatibility may change as development progresses.
-
-
-## Issues
-
-Current issues include:
-
-- 60 fps is not properly implemented
-- Adhoc not supported properly (relay has best support)
-- Online, this fork: the client completes the handshake and reaches the Matching Counter. Party play over the server (the rest of the ad hoc API, beginning with `sceNetAdhocctlAddHandler`) is not done yet.
-- Online, this fork: the shipped drop tables are placeholders until PSP2i's real tables are extracted.
-- The PPSSPP save support uses PPSSPP's `libkirk` (GPL; `port/third_party/libkirk`).
 
 ## Building
 
