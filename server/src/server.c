@@ -50,6 +50,7 @@ typedef struct {
      * of the message): replayed to a player who joins later (room_replay). */
     struct { uint32_t category; uint16_t size; uint8_t data[PSP_MMO_NP2_MSG_MAX]; } said[8];
     int      nsaid;
+    int      lobby_ready;  /* has sent its own chara-info request (category 5) in this room */
 } session;
 
 /* An Internet Multi Mode room: a 12-player lobby room or a party room. */
@@ -358,6 +359,7 @@ static void room_leave(srv *s, session *ss) {
 static void room_enter(srv *s, session *ss, int r) {
     room_leave(s, ss);
     ss->nsaid = 0;
+    ss->lobby_ready = 0;
     ss->room = r;
     ss->member_id = ++s->rooms[r].next_member;
 }
@@ -537,9 +539,15 @@ static void on_np2_room_msg(srv *s, session *ss, const psp_net_packet *p) {
         if (k == ss->nsaid && k < 8) ss->nsaid++;
         if (k < 8) { ss->said[k].category = cat; ss->said[k].size = size; memcpy(ss->said[k].data, p->data + 20, size); }
     }
+    const uint32_t cat = size >= 4 ? psp_mmo_get_u32(p->data + 20) : 0xFFFFFFFFu;
     for (int i = 0; i < MAX_SESSIONS; i++) {
         const session *o = &s->sess[i];
         if (o->state != SS_ACTIVE || o->room != ss->room || o == ss || (to && o->member_id != to)) continue;
+        /* Character data and chara-info requests wait until the member's own lobby player exists
+         * (it has sent its own request): earlier, its game drops the data ("not PadPlayer") and
+         * takes the request without ever answering it -- at 30 fps the joiner is often that slow,
+         * and the owner then never saw it. They reach it through room_replay when it is ready. */
+        if ((cat == ROOM_CAT_LOBBY_PACKET || cat == ROOM_CAT_CHARA_REQ) && !o->lobby_ready) continue;
         send_to(s, o->id, m, 20u + size);
     }
     /* Category 5 is the game's chara-info request (sendRoomMessageCharaInfoReq), sent once its own
@@ -548,7 +556,8 @@ static void on_np2_room_msg(srv *s, session *ss, const psp_net_packet *p) {
      * in the room (sent earlier, the game drops them: "not PadPlayer"). */
     /* ... and the others' own requests, sent while this player's game could not answer them yet:
      * it answers each by broadcasting its character data, which is how the others get it. */
-    if (size >= 4 && psp_mmo_get_u32(p->data + 20) == ROOM_CAT_CHARA_REQ) {
+    if (cat == ROOM_CAT_CHARA_REQ && !ss->lobby_ready) {
+        ss->lobby_ready = 1;
         room_replay(s, ss, ROOM_CAT_LOBBY_PACKET);
         room_replay(s, ss, ROOM_CAT_CHARA_REQ);
     }
