@@ -46,6 +46,10 @@ typedef struct {
     /* Internet Multi Mode room (-1 = none) and our member id in it */
     int      room;
     uint16_t member_id;
+    /* The room messages it broadcast in this room, the latest of each category (the first u32
+     * of the message): replayed to a player who joins later (room_replay). */
+    struct { uint32_t category; uint16_t size; uint8_t data[PSP_MMO_NP2_MSG_MAX]; } said[8];
+    int      nsaid;
 } session;
 
 /* An Internet Multi Mode room: a 12-player lobby room or a party room. */
@@ -353,6 +357,7 @@ static void room_leave(srv *s, session *ss) {
 
 static void room_enter(srv *s, session *ss, int r) {
     room_leave(s, ss);
+    ss->nsaid = 0;
     ss->room = r;
     ss->member_id = ++s->rooms[r].next_member;
 }
@@ -397,6 +402,29 @@ static void on_np2_create(srv *s, session *ss, const psp_net_packet *p) {
     room_joined_reply(s, ss, req);
 }
 
+/* A player who joins hears what the others already said to the room. The games broadcast their
+ * own character data (a 228-byte room message) once, when they enter -- the room's owner when it
+ * creates it, to nobody -- and on a PSP's servers a late joiner still got it: without it the
+ * joiner had the owner's movement packets but no character to move, and never saw the owner. */
+static void room_replay(srv *s, session *ss) {
+    static uint8_t m[20 + PSP_MMO_NP2_MSG_MAX];
+    int n = 0;
+    for (int i = 0; i < MAX_SESSIONS; i++) {
+        const session *o = &s->sess[i];
+        if (o->state != SS_ACTIVE || o->room != ss->room || o == ss) continue;
+        for (int k = 0; k < o->nsaid; k++) {
+            psp_mmo_put_hdr(m, MSG_S2C_NP2_ROOM_MSG);
+            psp_mmo_put_u64(m + 8, s->rooms[ss->room].id);
+            psp_mmo_put_u16(m + 16, o->member_id);
+            psp_mmo_put_u16(m + 18, o->said[k].size);
+            memcpy(m + 20, o->said[k].data, o->said[k].size);
+            send_to(s, ss->id, m, 20u + o->said[k].size);
+            n++;
+        }
+    }
+    if (n) slog(s, "rooms: replayed %d earlier room message(s) to '%s'", n, ss->name);
+}
+
 static void on_np2_join(srv *s, session *ss, const psp_net_packet *p) {
     if (p->len < 20) return;
     const uint32_t req = psp_mmo_get_u32(p->data + 8);
@@ -409,6 +437,7 @@ static void on_np2_join(srv *s, session *ss, const psp_net_packet *p) {
     slog(s, "rooms: '%s' joined room %llu (%d/%u)", ss->name, (unsigned long long)id, room_members(s, r), (unsigned)s->rooms[r].max);
     room_joined_reply(s, ss, req);
     room_tell(s, r, ss, 1, ss);
+    room_replay(s, ss);
 }
 
 static void on_np2_leave(srv *s, session *ss, const psp_net_packet *p) {
@@ -496,6 +525,13 @@ static void on_np2_room_msg(srv *s, session *ss, const psp_net_packet *p) {
     psp_mmo_put_u16(m + 16, ss->member_id);
     psp_mmo_put_u16(m + 18, size);
     memcpy(m + 20, p->data + 20, size);
+    if (!to && size >= 4) {                           /* a broadcast: kept for players who join later */
+        const uint32_t cat = psp_mmo_get_u32(p->data + 20);
+        int k = 0;
+        while (k < ss->nsaid && ss->said[k].category != cat) k++;
+        if (k == ss->nsaid && k < 8) ss->nsaid++;
+        if (k < 8) { ss->said[k].category = cat; ss->said[k].size = size; memcpy(ss->said[k].data, p->data + 20, size); }
+    }
     for (int i = 0; i < MAX_SESSIONS; i++) {
         const session *o = &s->sess[i];
         if (o->state != SS_ACTIVE || o->room != ss->room || o == ss || (to && o->member_id != to)) continue;

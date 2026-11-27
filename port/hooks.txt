@@ -58,3 +58,8 @@
 0x089F98AC   # area record: town? (area category 2): "no" in the Multi Mode lobby with WEAPONS IN THE LOBBY, except for the scene loader (host/lobby.c)
 0x089F98E4   # area record: special town? (category 2 + zone ranges): as above (host/lobby.c)
 0x0886C4DC   # session server: "no field object" (obj+36 == 0): holds back an equipment change's announcement in a lobby; passed with WEAPONS IN THE LOBBY (host/lobby.c)
+0x08A2594C   # lobby: send the local player's lobby state over UDP 3658 (logged on change: gamelog.c [lobby])
+0x08A3E520   # lobby: a check 0x08A2594C makes before sending (logged on change)
+0x08A2C0E4   # lobby: a check 0x08A2594C makes before sending (logged on change)
+0x08A2B940   # lobby: a check 0x08A2594C makes before sending (logged on change)
+0x08CB687C   # TPspNpMatching2: send a lobby packet to one member, 0 = all (logged on change)
