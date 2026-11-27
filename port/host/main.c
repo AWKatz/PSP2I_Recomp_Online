@@ -1838,8 +1838,11 @@ static void on_vblank(void) {
             SetWindowTextA(g_wnd, title);
         }
 #endif
-        window_pump();
     }
+    /* Every vblank, whichever way the picture is shown: the keys, resizes and Alt+Enter the window
+     * thread queued. It used to sit in the branch above only, so with OpenGL at full resolution
+     * (hd_direct, the default since 4x rendering) the keyboard did nothing at all. */
+    if (!g_headless) window_pump();
 #endif
     for (int i = 0; i < g_noverlay_shot; i++) {
         const uint64_t at = g_shot_by_flip ? psp_display_flips() : vb;
