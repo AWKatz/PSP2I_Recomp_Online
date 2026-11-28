@@ -572,6 +572,21 @@ static void on_np2_room_msg(srv *s, session *ss, const psp_net_packet *p) {
         const uint32_t cat = psp_mmo_get_u32(p->data + 20);
         int k = 0;
         while (k < ss->nsaid && ss->said[k].category != cat) k++;
+        /* Character data broadcast again by a player already in the room: its look changed (the
+         * F2 menu's character looks re-send it; a game otherwise broadcasts it once, on
+         * entering, and answers requests one player at a time). The others' games build a
+         * player's look only when it joins, so they hear it leave and join again (same member
+         * id), then get the new data. Not for the room's owner: the others' games may treat the
+         * owner leaving as the room ending; they see its new look when they next join. */
+        if (cat == ROOM_CAT_LOBBY_PACKET && k < ss->nsaid && ss->lobby_ready) {
+            if (s->rooms[ss->room].owner != ss->member_id) {
+                slog(s, "rooms: '%s' changed its look: the others see it leave and join again", ss->name);
+                room_tell(s, ss->room, ss, 0, ss);
+                room_tell(s, ss->room, ss, 1, ss);
+            } else {
+                slog(s, "rooms: '%s' (the room's owner) changed its look: the others see it when they next join", ss->name);
+            }
+        }
         if (k == ss->nsaid && k < 8) ss->nsaid++;
         if (k < 8) { ss->said[k].category = cat; ss->said[k].size = size; memcpy(ss->said[k].data, p->data + 20, size); }
     }
