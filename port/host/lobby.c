@@ -44,40 +44,33 @@ static volatile int g_weapons;
 /* The move the game last requested (game mode +536..+548 while a move is under way;
  * the game sets them back to -1 when it is done): where this client is now. */
 static struct { int have; int32_t dest; int16_t idx, zone, entry; } g_last_move;
-/* After lobby_reenter: once the area has gone and come back, and the player exists (a few
- * seconds), the room hears this client's character data again, with its new look. */
-enum { ANN_NONE, ANN_WAIT_UNLOAD, ANN_WAIT_LOAD, ANN_SETTLE };
-static struct { int state, frames; } g_announce;
+/* After lobby_reenter: at once, the room hears this client's character data again (Internet
+ * Multi Mode: every copy of the character already holds the new look, so the data the game
+ * builds now has it; the server makes the others build the player again). Then, half a second
+ * later, this client enters its area again, so its own view shows the new look too. */
+#define REENTER_DELAY_FRAMES 30
+static struct { int send, frames; } g_reenter;   /* send: the data is to go out; frames: until the warp */
 
-static void announce_step(void) {
-    if (g_announce.state == ANN_NONE) return;
-    const uint32_t m = psp_read32(AREA_MANAGER);
-    const uint32_t type = m ? psp_read32(m + 40) : 0;
-    g_announce.frames++;
-    switch (g_announce.state) {
-    case ANN_WAIT_UNLOAD:                                  /* the area going (type 0 between areas) */
-        if (type == 0) { g_announce.state = ANN_WAIT_LOAD; g_announce.frames = 0; }
-        else if (g_announce.frames > 600) { g_announce.state = ANN_WAIT_LOAD; g_announce.frames = 0; }
-        break;
-    case ANN_WAIT_LOAD:
-        if (type == LOBBY_TYPE) { g_announce.state = ANN_SETTLE; g_announce.frames = 0; }
-        else if (g_announce.frames > 60 * 60) g_announce.state = ANN_NONE;   /* no lobby within a minute: give up */
-        break;
-    case ANN_SETTLE:                                       /* the player and the room's players built */
-        if (g_announce.frames < 180) break;
-        g_announce.state = ANN_NONE;
-        if (type == LOBBY_TYPE && psp_read32(INFRA_CLIENT)) {
+static void reenter_step(void) {
+    if (g_reenter.send) {
+        g_reenter.send = 0;
+        const uint32_t m = psp_read32(AREA_MANAGER);
+        const uint32_t ic = psp_read32(INFRA_CLIENT);
+        if (m && psp_read32(m + 40) == LOBBY_TYPE && ic) {
             /* The sender (0x08A68548, run by the infra client's update) only sends while the
              * time at +624 (u64, network ticks) is still ahead -- the window an answer to a
              * request opens -- or when it is 0. A window from an earlier answer has long
              * closed, so it is cleared: the next update builds and sends the data. */
-            const uint32_t ic = psp_read32(INFRA_CLIENT);
             psp_write32(ic + 624, 0);
             psp_write32(ic + 628, 0);
             psp_net_log("lobby: sending this player's character data to the room again (its new look)");
             psp_call_guest(FN_SEND_LOBBY_DATA, 0, 0, 0);
         }
-        break;
+    }
+    if (g_reenter.frames > 0 && --g_reenter.frames == 0) {
+        psp_net_log("lobby: entering the area again (destination %d, zone %d, entry %d)", g_last_move.dest, g_last_move.zone,
+                    g_last_move.entry);
+        lobby_warp(g_last_move.dest, g_last_move.idx, g_last_move.zone, g_last_move.entry);
     }
 }
 static int g_entry = 4;              /* the room this client is in (the plaza, where Multi Mode starts) */
@@ -100,17 +93,15 @@ int lobby_reenter(void) {
     const uint32_t type = psp_read32(m + 40);
     const int16_t zone = (int16_t)psp_read16(m + 44);
     if (type != LOBBY_TYPE || zone != g_last_move.zone) return -1;
-    psp_net_log("lobby: entering the area again (destination %d, zone %d, entry %d)", g_last_move.dest, zone, g_last_move.entry);
-    lobby_warp(g_last_move.dest, g_last_move.idx, g_last_move.zone, g_last_move.entry);
-    g_announce.state = ANN_WAIT_UNLOAD;                    /* then tell the room (Internet Multi Mode) */
-    g_announce.frames = 0;
+    g_reenter.send = 1;                                    /* the room hears the new look at once */
+    g_reenter.frames = REENTER_DELAY_FRAMES;               /* then this client's own view */
     return 0;
 }
 void lobby_set_weapons(int on) { g_weapons = on ? 1 : 0; }
 int  lobby_weapons(void) { return g_weapons; }
 
 static void hook_area_update(void (*original)(void)) {
-    announce_step();
+    reenter_step();
     psp_net_mmo_warp w;
     if (psp_net_mmo_take_warp(&w)) {                       /* the leader's choice, with the party's lobby options */
         if (w.flags & PSP_MMO_WARP_OPTIONS) g_weapons = (w.flags & PSP_MMO_WARP_WEAPONS) != 0;

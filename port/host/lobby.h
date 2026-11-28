@@ -37,7 +37,10 @@ int  lobby_entry(void);
  * the area loads and the player is built again from the character data (a
  * character look from the F2 menu then shows). Only in a lobby or other
  * area of type 2 (towns: a mission field would start over), and only when
- * that move led to the zone this client is in. 0 when asked, -1 when not. */
+ * that move led to the zone this client is in. In Internet Multi Mode the room
+ * first hears this client's character data again, at once (the server makes the
+ * others build the player again); the area is entered again half a second later.
+ * 0 when asked, -1 when not. */
 int  lobby_reenter(void);
 
 /* Weapons in the lobby. A change shows fully after re-entering the room
