@@ -51,6 +51,7 @@ typedef struct {
     struct { uint32_t category; uint16_t size; uint8_t data[PSP_MMO_NP2_MSG_MAX]; } said[8];
     int      nsaid;
     int      lobby_ready;  /* has sent its own chara-info request (category 5) in this room */
+    uint32_t lan_addr;     /* its own address on its network, as it told us (network order; 0 = unknown) */
 } session;
 
 /* An Internet Multi Mode room: a 12-player lobby room or a party room. */
@@ -125,7 +126,8 @@ static int name_ok(const uint8_t *p, size_t n) {
 }
 
 uint32_t srv_check_handshake(const uint8_t *msg, uint32_t len, char *name, uint8_t mac[6]) {
-    if (len != PSP_MMO_HANDSHAKE_LEN || psp_mmo_type(msg, len) != MSG_C2S_HANDSHAKE) return PSP_MMO_ERR_VERSION;
+    if ((len != PSP_MMO_HANDSHAKE_LEN && len != PSP_MMO_HANDSHAKE_LAN_LEN) || psp_mmo_type(msg, len) != MSG_C2S_HANDSHAKE)
+        return PSP_MMO_ERR_VERSION;
     const uint8_t *m = msg + PSP_MMO_HDR_LEN;
     const uint8_t *nm = m + 6, *ver = nm + PSP_MMO_NAME_LEN;
     const uint8_t *nul = memchr(nm, 0, PSP_MMO_NAME_LEN);
@@ -225,6 +227,8 @@ static void on_handshake(srv *s, session *ss, const psp_net_packet *p) {
     }
     memcpy(ss->mac, mac, 6);
     memcpy(ss->name, name, sizeof name);
+    ss->lan_addr = 0;                                   /* newer clients: their own address, network order */
+    if (p->len == PSP_MMO_HANDSHAKE_LAN_LEN) memcpy(&ss->lan_addr, p->data + PSP_MMO_HANDSHAKE_LEN, 4);
     ss->state = SS_ACTIVE;
     ss->joined_ms = s->now_ms;
     psp_net_enet_authorize(s->enet, ss->id, 1);
@@ -233,8 +237,11 @@ static void on_handshake(srv *s, session *ss, const psp_net_packet *p) {
     send_text(s, ss->id, PSP_MMO_TEXT_TERMS, s->cfg.terms_path);
     send_text(s, ss->id, PSP_MMO_TEXT_NOTICES, s->cfg.notices_path);
     s->st.handshakes_ok++;
-    slog(s, "player '%s' joined: session %llu, mac %02X:%02X:%02X:%02X:%02X:%02X, %s (%d/%d)", name,
-         (unsigned long long)ss->id, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], addr, count(s, SS_ACTIVE), s->cfg.max_players);
+    const uint8_t *la = (const uint8_t *)&ss->lan_addr;
+    char lan[48] = "";
+    if (ss->lan_addr) snprintf(lan, sizeof lan, " (its own address %u.%u.%u.%u)", la[0], la[1], la[2], la[3]);
+    slog(s, "player '%s' joined: session %llu, mac %02X:%02X:%02X:%02X:%02X:%02X, %s%s (%d/%d)", name,
+         (unsigned long long)ss->id, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], addr, lan, count(s, SS_ACTIVE), s->cfg.max_players);
 }
 
 /* ---- transport hooks -------------------------------------------------------------- */
@@ -290,11 +297,16 @@ static uint32_t local_addr_toward(uint32_t to) {
 }
 
 /* The address member `ss` is reached at, as told to `to`: the games talk to
- * each other directly (UDP 3658). A player on the server's own machine joins
- * through 127.0.0.1, which a player elsewhere must not be given -- it would
- * send to itself -- so it gets this machine's address on its route instead. */
+ * each other directly (UDP 3658).
+ *  - Two players who reach the server from the same address are behind the same router (the
+ *    server is on another network, or the internet): the router's address doesn't lead back to
+ *    either, so each gets the other's own address on their network, as it told us.
+ *  - A player on the server's own machine joins through 127.0.0.1, which a player elsewhere must
+ *    not be given -- it would send to itself -- so it gets this machine's address on its route. */
 static uint32_t member_addr(srv *s, const session *ss, const session *to) {
     const uint32_t a = peer_addr(s, ss);
+    if (to && ss != to && ss->lan_addr && a && !is_loopback(a) && a == peer_addr(s, to) && a != ss->lan_addr)
+        return ss->lan_addr;
     if (!is_loopback(a)) return a;
     const uint32_t t = peer_addr(s, to);
     if (!t || is_loopback(t)) return a;

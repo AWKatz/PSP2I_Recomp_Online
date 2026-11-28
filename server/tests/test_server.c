@@ -202,10 +202,12 @@ static void cl_free(client *c) { psp_net_enet_destroy(c->e); c->e = NULL; }
 
 /* ---- handshake checks ---- */
 static uint32_t check(const uint8_t mac[6], const char *name, int tweak) {
-    uint8_t b[PSP_MMO_HANDSHAKE_LEN + 1];
+    uint8_t b[PSP_MMO_HANDSHAKE_LAN_LEN + 1] = { 0 };
     make_hs(b, mac, name);
     uint32_t len = PSP_MMO_HANDSHAKE_LEN;
     if (tweak == 1) len--;                                    /* short */
+    if (tweak == 4) len = PSP_MMO_HANDSHAKE_LAN_LEN;          /* with the client's own address */
+    if (tweak == 5) len = PSP_MMO_HANDSHAKE_LEN + 2;          /* neither length */
     if (tweak == 2) b[0] ^= 1;                                /* bad magic */
     if (tweak == 3) memset(b + PSP_MMO_HDR_LEN + 6, 'A', PSP_MMO_NAME_LEN);   /* no NUL */
     char out[PSP_MMO_NAME_LEN + 1];
@@ -218,6 +220,8 @@ int main(void) {
     CHECK(check(good, "Ann", 0) == PSP_MMO_OK);
     CHECK(check(good, "\xE3\x82\xA2\xE3\x83\xB3", 0) == PSP_MMO_OK);   /* Japanese, UTF-8 */
     CHECK(check(good, "Ann", 1) == PSP_MMO_ERR_VERSION);
+    CHECK(check(good, "Ann", 4) == PSP_MMO_OK);              /* newer clients: + their own address */
+    CHECK(check(good, "Ann", 5) == PSP_MMO_ERR_VERSION);
     CHECK(check(good, "Ann", 2) == PSP_MMO_ERR_VERSION);
     CHECK(check(good, "Ann", 3) == PSP_MMO_ERR_NAME);
     CHECK(check(good, "", 0) == PSP_MMO_ERR_NAME);

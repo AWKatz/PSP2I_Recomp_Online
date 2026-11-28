@@ -127,11 +127,17 @@ static int mmo_connect(void) {
     psp_net_log("mmo: WLAN/PSN checks bypassed; joining %s over %s", g_server, t->name);
     if (t->join_session(t->ctx, g_server, "PSP2I") != PSP_NET_OK) { psp_net_log("mmo: could not reach %s", g_server); return -1; }
 
-    uint8_t m[PSP_MMO_HANDSHAKE_LEN];
+    uint8_t m[PSP_MMO_HANDSHAKE_LAN_LEN];
     psp_mmo_put_hdr(m, MSG_C2S_HANDSHAKE);
     memcpy(m + PSP_MMO_HDR_LEN, mac, 6);
     psp_mmo_put_str(m + PSP_MMO_HDR_LEN + 6, g_name, PSP_MMO_NAME_LEN);
     psp_mmo_put_str(m + PSP_MMO_HDR_LEN + 6 + PSP_MMO_NAME_LEN, g_version, PSP_MMO_VERSION_LEN);
+    {   /* our own address on this network: for players behind the same router as us */
+        psp_net_host h;
+        const uint32_t ip = psp_net_host_info(&h) ? h.ipv4 : 0;        /* host order */
+        uint8_t *a = m + PSP_MMO_HANDSHAKE_LEN;
+        a[0] = (uint8_t)(ip >> 24); a[1] = (uint8_t)(ip >> 16); a[2] = (uint8_t)(ip >> 8); a[3] = (uint8_t)ip;
+    }
     psp_net_peer server = { { 0 }, 1 };   /* the host: id 1 */
     const int rc = t->send_packet(t->ctx, &server, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, m, sizeof m);
     psp_net_log("mmo: sent MSG_C2S_HANDSHAKE to %s (%u bytes, mac %02X:%02X:%02X:%02X:%02X:%02X, name '%s') -> %d",

@@ -150,8 +150,13 @@ enum {
 enum { PSP_MMO_HDR_LEN = 8 };            /* magic u32, type u16, version u16 */
 enum { PSP_MMO_NAME_LEN = 32, PSP_MMO_VERSION_LEN = 32 };
 
-/* MSG_C2S_HANDSHAKE: hdr, mac[6], name[32] (NUL-padded), client version[32] */
+/* MSG_C2S_HANDSHAKE: hdr, mac[6], name[32] (NUL-padded), client version[32], then (newer
+ * clients) the client's own IPv4 address on its network, 4 bytes in network order (0 = unknown).
+ * The server gives that address to players who reach it from the same outside address, so
+ * players behind the same router (the server elsewhere) can reach each other directly.
+ * A server accepts either length. */
 enum { PSP_MMO_HANDSHAKE_LEN = PSP_MMO_HDR_LEN + 6 + PSP_MMO_NAME_LEN + PSP_MMO_VERSION_LEN };
+enum { PSP_MMO_HANDSHAKE_LAN_LEN = PSP_MMO_HANDSHAKE_LEN + 4 };
 /* MSG_S2C_HANDSHAKE_ACK: hdr, status u32 (0 = accepted), session id u64 */
 enum { PSP_MMO_HANDSHAKE_ACK_LEN = PSP_MMO_HDR_LEN + 4 + 8 };
 
