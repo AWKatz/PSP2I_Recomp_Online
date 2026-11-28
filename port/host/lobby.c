@@ -67,6 +67,13 @@ static void announce_step(void) {
         if (g_announce.frames < 180) break;
         g_announce.state = ANN_NONE;
         if (type == LOBBY_TYPE && psp_read32(INFRA_CLIENT)) {
+            /* The sender (0x08A68548, run by the infra client's update) only sends while the
+             * time at +624 (u64, network ticks) is still ahead -- the window an answer to a
+             * request opens -- or when it is 0. A window from an earlier answer has long
+             * closed, so it is cleared: the next update builds and sends the data. */
+            const uint32_t ic = psp_read32(INFRA_CLIENT);
+            psp_write32(ic + 624, 0);
+            psp_write32(ic + 628, 0);
             psp_net_log("lobby: sending this player's character data to the room again (its new look)");
             psp_call_guest(FN_SEND_LOBBY_DATA, 0, 0, 0);
         }
