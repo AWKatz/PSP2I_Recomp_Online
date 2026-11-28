@@ -281,6 +281,8 @@ While the menu is open the game gets no input.
 
 - **Weapons in the lobby** (off by default; the party leader's choice for the whole party): show off your gear. With it on, the lobby gets the weapon palette (hold Cross / Z and pick a weapon set as in a mission), and everyone in the party sees the weapons you draw. Switching it re-enters the room you are in, so it applies at once; off puts every weapon away and hides the palette, as in the original game. Attacks do nothing there: the lobby has no enemies.
 
+  In **Internet Multi Mode** (its lobby, and the party lobby you go to after forming a party) it is **each player's own setting**, in the same F2 row: switching it enters your area again so it applies at once. Whether the others see your drawn weapons there is still being tested.
+
 **Test switches (any SDL build).** `PSP2I_TEST_INPUT=1` makes the client read button presses from `<data>/logs/input.cmd` (`start`, `circle`, `cross`, `up`, `down`, …, `wait500`, `f2`, `shot`, which saves the window's picture to `logs/shot_<n>.png`, `stick<u|d|l|r><ms>`, `hold<button>` / `release`, `watch<hex address>`, `dump`, `warp<dest>,<area index>,<zone>,<entry>` and `lobbyweapons<0|1>`), so test scripts can drive several clients at once without window focus. `PSP2I_NETTRACE=1` logs every ad hoc socket call; `PSP2I_RAMDUMP=1` makes F7 save the game's memory to `logs/`.
 
 More detail: [server/README.md](server/README.md), [port/linux/README.md](port/linux/README.md), [port/macos/README.md](port/macos/README.md).

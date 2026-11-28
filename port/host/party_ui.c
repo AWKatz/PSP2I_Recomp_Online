@@ -145,6 +145,17 @@ static void choose_left(int row, const psp_net_mmo_status *st, int role) {
         return;
     }
     if (row == L_CLOSE) { U.state = ST_HIDDEN; return; }
+    if (row == L_WEAPONS && lobby_internet_lobby()) {
+        /* Internet Multi Mode: each player's own setting (no party warp there); applied by
+         * entering the area again, without the character data going out again */
+        lobby_set_weapons(!lobby_weapons());
+        char m[96];
+        snprintf(m, sizeof m, "Weapons in the lobby: %s%s", lobby_weapons() ? "on" : "off",
+                 lobby_reenter_quiet() == 0 ? " (entering the area again)" : " (from the next area)");
+        notice(m, 4);
+        U.state = ST_HIDDEN;
+        return;
+    }
     if (!in_lobby()) { notice("Warps and lobby options work in the Multi Mode lobby.", 4); return; }
     if (row < L_WEAPONS) {
         if (role != PSP_MMO_PARTY_LEADER) { notice("Only the party leader can warp the party.", 4); return; }
@@ -438,7 +449,10 @@ int party_ui_draw(menu_image *img, int *bx, int *by, int *bw, int *bh) {
             uint32_t col = WHITE;
             if (i == L_FINDER) { snprintf(line, sizeof line, "Party finder"); if (!finder) col = GREY; }
             else if (i < L_WEAPONS) { snprintf(line, sizeof line, "%s", ROOMS[i - L_ROOM0].name); if (!lobby || !leader) col = GREY; }
-            else if (i == L_WEAPONS) { snprintf(line, sizeof line, "Lobby weapons: %s", lobby_weapons() ? "ON" : "OFF"); if (!lobby || !leader) col = GREY; }
+            else if (i == L_WEAPONS) {
+                snprintf(line, sizeof line, "Lobby weapons: %s", lobby_weapons() ? "ON" : "OFF");
+                if ((!lobby || !leader) && !lobby_internet_lobby()) col = GREY;
+            }
             else snprintf(line, sizeof line, "Close");
             if (i == U.lsel) {
                 fill(img, x + 6, ly - 2, lw - 12, 11, U.col == 0 ? 0xFF304878 : 0xFF1C2A44);

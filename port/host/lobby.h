@@ -42,6 +42,13 @@ int  lobby_entry(void);
  * others build the player again); the area is entered again half a second later.
  * 0 when asked, -1 when not. */
 int  lobby_reenter(void);
+/* The same, without sending the character data again (a lobby option, not a new look). */
+int  lobby_reenter_quiet(void);
+
+/* Internet Multi Mode (its infra client exists), and in one of its lobbies (zone 2101, or the
+ * party lobby, zone 2000): there "weapons in the lobby" is this player's own setting. */
+int  lobby_internet(void);
+int  lobby_internet_lobby(void);
 
 /* Weapons in the lobby. A change shows fully after re-entering the room
  * (a warp): on, the palette appears; off, drawn weapons are put away. */

@@ -38,6 +38,7 @@ static const uint32_t RA_EQUIP_NOTICE[] = { 0x0882A4C0u, 0x08D1EF68u, 0x08D1F29C
 #define LOBBY_DEST 2010000
 #define LOBBY_TYPE 2
 #define LOBBY_ZONE 2000
+#define INFRA_LOBBY_ZONE 2101   /* Internet Multi Mode's lobby; its party lobby is LOBBY_ZONE */
 
 static struct { volatile int pending; int32_t dest; int16_t idx, zone, entry; } g_warp;
 static volatile int g_weapons;
@@ -80,6 +81,18 @@ int lobby_here(void) {
     return m && psp_read32(m + 40) == LOBBY_TYPE && (int16_t)psp_read16(m + 44) == LOBBY_ZONE;
 }
 
+/* Where "weapons in the lobby" acts: the Multi Mode lobby (also Internet Multi Mode's party
+ * lobby) and Internet Multi Mode's lobby. */
+static int weapons_area(void) {
+    const uint32_t m = psp_read32(AREA_MANAGER);
+    if (!m || psp_read32(m + 40) != LOBBY_TYPE) return 0;
+    const int16_t z = (int16_t)psp_read16(m + 44);
+    return z == LOBBY_ZONE || z == INFRA_LOBBY_ZONE;
+}
+
+int lobby_internet(void) { return psp_read32(INFRA_CLIENT) != 0; }
+int lobby_internet_lobby(void) { return lobby_internet() && weapons_area(); }
+
 void lobby_warp(int32_t dest, int16_t area_index, int16_t zone, int16_t entry) {
     g_warp.dest = dest; g_warp.idx = area_index; g_warp.zone = zone; g_warp.entry = entry;
     g_warp.pending = 1;
@@ -87,13 +100,17 @@ void lobby_warp(int32_t dest, int16_t area_index, int16_t zone, int16_t entry) {
 
 int  lobby_entry(void) { return g_entry; }
 
-int lobby_reenter(void) {
+static int reenter(int announce);
+int lobby_reenter(void) { return reenter(1); }
+int lobby_reenter_quiet(void) { return reenter(0); }
+
+static int reenter(int announce) {
     const uint32_t m = psp_read32(AREA_MANAGER);
     if (!m || !g_last_move.have) return -1;
     const uint32_t type = psp_read32(m + 40);
     const int16_t zone = (int16_t)psp_read16(m + 44);
     if (type != LOBBY_TYPE || zone != g_last_move.zone) return -1;
-    g_reenter.send = 1;                                    /* the room hears the new look at once */
+    g_reenter.send = announce;                             /* the room hears the new look at once */
     g_reenter.frames = REENTER_DELAY_FRAMES;               /* then this client's own view */
     return 0;
 }
@@ -137,7 +154,7 @@ static void hook_area_update(void (*original)(void)) {
 static void hook_is_town(void (*original)(void)) {
     const uint32_t ra = psp_cpu.r[31];
     original();
-    if (g_weapons && psp_cpu.r[2] && ra != RA_SCENE_LOADER && lobby_here()) psp_cpu.r[2] = 0;
+    if (g_weapons && psp_cpu.r[2] && ra != RA_SCENE_LOADER && weapons_area()) psp_cpu.r[2] = 0;
 }
 
 static void hook_no_field(void (*original)(void)) {
@@ -145,7 +162,7 @@ static void hook_no_field(void (*original)(void)) {
     original();
     if (!g_weapons || !psp_cpu.r[2]) return;
     for (size_t i = 0; i < sizeof RA_EQUIP_NOTICE / sizeof RA_EQUIP_NOTICE[0]; i++)
-        if (ra == RA_EQUIP_NOTICE[i] && lobby_here()) { psp_cpu.r[2] = 0; return; }
+        if (ra == RA_EQUIP_NOTICE[i] && weapons_area()) { psp_cpu.r[2] = 0; return; }
 }
 
 /* Research (PSP2I_QUEST_TRACE=1): quest tables asked for by id, and the
