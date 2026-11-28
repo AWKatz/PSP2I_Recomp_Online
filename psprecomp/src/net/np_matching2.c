@@ -787,6 +787,8 @@ void mmo_matching2_pump(void) {
 
 /* The server connection was lost: the room, the requests waiting on the server and the
  * events not yet delivered belong to the old session. A new session starts empty. */
+int psp_net_mmo_np2_in_room(void) { return g_room.room_id != 0; }
+
 void mmo_matching2_reset(void) {
     memset(&g_room, 0, sizeof g_room);
     memset(g_pend, 0, sizeof g_pend);

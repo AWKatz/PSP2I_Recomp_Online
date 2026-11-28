@@ -45,7 +45,7 @@ int  lobby_reenter(void);
 /* The same, without sending the character data again (a lobby option, not a new look). */
 int  lobby_reenter_quiet(void);
 
-/* Internet Multi Mode (its infra client exists), and in one of its lobbies (zone 2101, or the
+/* Internet Multi Mode (in one of its matching rooms), and in one of its lobbies (zone 2101, or the
  * party lobby, zone 2000): there "weapons in the lobby" is this player's own setting. */
 int  lobby_internet(void);
 int  lobby_internet_lobby(void);

@@ -122,6 +122,8 @@ int  psp_net_mmo_take_warp(psp_net_mmo_warp *out);
 int  psp_net_mmo_join_target(uint8_t mac[6]);      /* 1 when one is set */
 /* This client's role in the game's party (PSP_MMO_PARTY_*: 0 none, 1 leader, 2 member). */
 int  psp_net_mmo_party_role(void);
+/* Internet Multi Mode: in a PSN-style matching room (a lobby room or a party room) now. */
+int  psp_net_mmo_np2_in_room(void);
 
 /* Where the game is in Multi Mode, for the host's party automation. */
 typedef struct {

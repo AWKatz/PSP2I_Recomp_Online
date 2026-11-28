@@ -52,12 +52,13 @@ static struct { int have; int32_t dest; int16_t idx, zone, entry; } g_last_move;
 #define REENTER_DELAY_FRAMES 30
 static struct { int send, frames; } g_reenter;   /* send: the data is to go out; frames: until the warp */
 
+int lobby_internet(void);
 static void reenter_step(void) {
     if (g_reenter.send) {
         g_reenter.send = 0;
         const uint32_t m = psp_read32(AREA_MANAGER);
         const uint32_t ic = psp_read32(INFRA_CLIENT);
-        if (m && psp_read32(m + 40) == LOBBY_TYPE && ic) {
+        if (m && psp_read32(m + 40) == LOBBY_TYPE && ic && lobby_internet()) {
             /* The sender (0x08A68548, run by the infra client's update) only sends while the
              * time at +624 (u64, network ticks) is still ahead -- the window an answer to a
              * request opens -- or when it is 0. A window from an earlier answer has long
@@ -90,7 +91,9 @@ static int weapons_area(void) {
     return z == LOBBY_ZONE || z == INFRA_LOBBY_ZONE;
 }
 
-int lobby_internet(void) { return psp_read32(INFRA_CLIENT) != 0; }
+/* Internet Multi Mode: in one of its matching rooms (the infra client object can't tell: it
+ * exists in Multi Mode too once Internet Multi Mode has been visited). */
+int lobby_internet(void) { return psp_net_mmo_np2_in_room(); }
 int lobby_internet_lobby(void) { return lobby_internet() && weapons_area(); }
 
 void lobby_warp(int32_t dest, int16_t area_index, int16_t zone, int16_t entry) {
