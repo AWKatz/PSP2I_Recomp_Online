@@ -106,6 +106,35 @@ int charswap_current(void) {
     return -1;
 }
 
+/* ---- the other copies of your character ---------------------------------------------- */
+
+/* The game keeps more copies of your character than the character data: the player object
+ * (appearance at +0x540), the save data it works from, Internet Multi Mode's buffers. In
+ * Internet Multi Mode an area load copies the character back from one of them, which undid a
+ * swap made to the character data alone. So every copy is changed with it: a block with your
+ * character's name at its start and `old` at +0x80 (the class bytes, header +2 and +3, aside:
+ * a swap from before they were kept may have left them out of step) gets `new` there. Partner records
+ * carry other names; the character data itself is the caller's. Returns how many. */
+static int patch_copies(uint32_t cd, const uint8_t old[APP_BYTES], const uint8_t neu[APP_BYTES]) {
+    const uint8_t *name = (const uint8_t *)psp_mem_ptr(cd, 64);
+    int nlen = 0;
+    while (nlen < 32 && (name[2 * nlen] || name[2 * nlen + 1])) nlen++;
+    if (!nlen) return 0;
+    const uint32_t nbytes = (uint32_t)(nlen + 1) * 2;             /* the name and its NUL */
+    uint8_t *lo = (uint8_t *)psp_mem_ptr(SCAN_LO, SCAN_HI - SCAN_LO);
+    if (!lo) return 0;
+    int n = 0;
+    for (uint32_t off = CHARSWAP_APPEARANCE; off + APP_BYTES <= SCAN_HI - SCAN_LO; off += 4) {
+        uint8_t *p = lo + off;
+        if (p[0] != old[0] || p[1] != old[1] || memcmp(p + 4, old + 4, APP_BYTES - 4)) continue;
+        const uint32_t at = SCAN_LO + off - CHARSWAP_APPEARANCE;      /* the block's start */
+        if (at == cd || memcmp(p - CHARSWAP_APPEARANCE, name, nbytes)) continue;
+        memcpy(p, neu, APP_BYTES);
+        n++;
+    }
+    return n;
+}
+
 /* ---- the backup of your own look -------------------------------------------------- */
 
 static void my_name(uint32_t cd, char *out, size_t cap) { ascii_name((const uint8_t *)psp_mem_ptr(cd, 64), 32, out, cap); }
@@ -157,6 +186,8 @@ int charswap_apply(int i, char *msg, size_t cap) {
         my_name(cd, name, sizeof name);
         if (!write_backup(name, mine)) { snprintf(msg, cap, "Couldn't save your own look to character_backup.txt: nothing changed."); return -1; }
     }
+    uint8_t old[APP_BYTES];
+    memcpy(old, mine, APP_BYTES);
     {   /* your class and header +3 from the backup: a swap made before they were kept may have changed them */
         char name[64], now[64];
         uint8_t own[APP_BYTES];
@@ -165,8 +196,10 @@ int charswap_apply(int i, char *msg, size_t cap) {
     }
     memcpy(mine, r, 2);             /* race, sex */
     memcpy(mine + 8, r + 8, 24);    /* the six part slots; your class (+2, +3) and +4 stay yours */
+    const int copies = patch_copies(cd, old, mine);
     snprintf(msg, cap, "Now %s: it shows when you next enter an area.", g_name[i]);
-    fprintf(stderr, "charswap: wearing %s (record %d at %08X)\n", g_name[i], i, g_table + (uint32_t)i * REC_STRIDE);
+    fprintf(stderr, "charswap: wearing %s (record %d at %08X; %d other cop%s of the character changed too)\n", g_name[i], i,
+            g_table + (uint32_t)i * REC_STRIDE, copies, copies == 1 ? "y" : "ies");
     return 0;
 }
 
@@ -182,9 +215,13 @@ int charswap_restore(char *msg, size_t cap) {
     }
     my_name(cd, now, sizeof now);
     if (strcmp(name, now)) { snprintf(msg, cap, "The saved look is %s's, not this character's.", name); return -1; }
-    memcpy(psp_mem_ptr(cd + CHARSWAP_APPEARANCE, APP_BYTES), app, APP_BYTES);
+    uint8_t *mine = (uint8_t *)psp_mem_ptr(cd + CHARSWAP_APPEARANCE, APP_BYTES);
+    uint8_t old[APP_BYTES];
+    memcpy(old, mine, APP_BYTES);
+    memcpy(mine, app, APP_BYTES);
+    const int copies = patch_copies(cd, old, app);
     remove(g_backup_path);
     snprintf(msg, cap, "Your own look again: it shows when you next enter an area.");
-    fprintf(stderr, "charswap: own look restored\n");
+    fprintf(stderr, "charswap: own look restored (%d other cop%s too)\n", copies, copies == 1 ? "y" : "ies");
     return 0;
 }

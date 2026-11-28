@@ -65,6 +65,15 @@ int main(void) {
     CHECK(charswap_current() == -1);
     CHECK(!charswap_have_backup());
 
+    /* other copies of the character (the game keeps several): same name and look -> changed with
+     * it; another name, or another look -> left alone */
+    const uint32_t COPY = 0x09A00000u, OTHER = 0x09A01000u, STALE = 0x09A02000u;
+    uint8_t look[32];
+    psp_mem_read_block(look, CD + CHARSWAP_APPEARANCE, 32);
+    put_name(COPY, "Client A");  psp_mem_write_block(COPY + 0x80, look, 32);
+    put_name(OTHER, "Client B"); psp_mem_write_block(OTHER + 0x80, look, 32);
+    put_name(STALE, "Client A"); psp_mem_write_block(STALE + 0x80, look, 32); psp_write8(STALE + 0x9F, 0x77);
+
     char msg[128];
     uint8_t before[32];
     psp_mem_read_block(before, CD + CHARSWAP_APPEARANCE, 32);
@@ -76,6 +85,13 @@ int main(void) {
     CHECK(psp_read32(CD + 0x84) == 0x7F);                 /* the word stays yours */
     CHECK(psp_read32(CD + 0x88) == 0x1013A700u && psp_read32(CD + 0x9C) == 0x1513A700u);
     CHECK(psp_read32(CD + 0xA0) == 0x00040404u);          /* colours stay yours */
+    {
+        uint8_t now[32], c[32];
+        psp_mem_read_block(now, CD + CHARSWAP_APPEARANCE, 32);
+        psp_mem_read_block(c, COPY + 0x80, 32);  CHECK(!memcmp(c, now, 32));    /* the copy follows */
+        psp_mem_read_block(c, OTHER + 0x80, 32); CHECK(!memcmp(c, look, 32));   /* another character's: not */
+        psp_mem_read_block(c, STALE + 0x80, 31); CHECK(!memcmp(c, look, 31) && psp_read8(STALE + 0x9F) == 0x77);
+    }
 
     CHECK(charswap_apply(2, msg, sizeof msg) == 0);       /* a second swap keeps the first backup */
     CHECK(charswap_current() == 2);
@@ -96,6 +112,11 @@ int main(void) {
     uint8_t after[32];
     psp_mem_read_block(after, CD + CHARSWAP_APPEARANCE, 32);
     CHECK(!memcmp(before, after, 32));
+    {   /* the copy has the own look back too */
+        uint8_t c[32];
+        psp_mem_read_block(c, COPY + 0x80, 32);
+        CHECK(!memcmp(c, before, 32));
+    }
     CHECK(!charswap_have_backup());
     CHECK(charswap_restore(msg, sizeof msg) != 0);        /* nothing to put back */
 
