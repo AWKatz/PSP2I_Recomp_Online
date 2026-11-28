@@ -97,7 +97,14 @@ static int g_next_ids;
 
 #define MAX_REQ 8
 #define REQ_DATA 16384
-static struct { int used; uint32_t id, cb, arg; uint16_t event; int32_t error; uint32_t size; uint8_t data[REQ_DATA]; } g_req[MAX_REQ];
+static struct { int used; uint32_t id, cb, arg, due; uint16_t event; int32_t error; uint32_t size; uint8_t data[REQ_DATA]; } g_req[MAX_REQ];
+/* Request callbacks wait this many frames (about 100 ms), as a real server's answer would:
+ * the game sets the state that waits for an answer only after the request call returns (and
+ * after its own logging), so an answer at the very next frame could come before that state,
+ * and the game would then wait for it forever (the party host stuck at "accessing
+ * PlayStation Network", SUBMODE_INFRA_MATCH_ParentPublishRoomPoll). */
+#define REPLY_DELAY_FRAMES 6
+static uint32_t g_frame;                                    /* mmo_matching2_pump calls */
 static uint32_t g_next_req = 1;
 static uint32_t g_scratch;                                  /* guest memory for reply data */
 
@@ -112,7 +119,7 @@ static void put32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(
 static void enqueue(uint32_t id, uint32_t cb, uint32_t arg, uint16_t event, int32_t error, const void *data, uint32_t size) {
     for (int i = 0; i < MAX_REQ; i++)
         if (!g_req[i].used) {
-            g_req[i].used = 1; g_req[i].id = id; g_req[i].cb = cb; g_req[i].arg = arg;
+            g_req[i].used = 1; g_req[i].id = id; g_req[i].cb = cb; g_req[i].arg = arg; g_req[i].due = g_frame + REPLY_DELAY_FRAMES;
             g_req[i].event = event; g_req[i].error = error;
             g_req[i].size = size > REQ_DATA ? REQ_DATA : size;
             if (data && g_req[i].size) memcpy(g_req[i].data, data, g_req[i].size);
@@ -125,7 +132,7 @@ static void enqueue(uint32_t id, uint32_t cb, uint32_t arg, uint16_t event, int3
 static uint32_t queue_reply(uint32_t opt, uint32_t req_id_out, uint16_t event, int32_t error, const void *data, uint32_t size) {
     for (int i = 0; i < MAX_REQ; i++)
         if (!g_req[i].used) {
-            g_req[i].used = 1; g_req[i].id = g_next_req++;
+            g_req[i].used = 1; g_req[i].id = g_next_req++; g_req[i].due = g_frame + REPLY_DELAY_FRAMES;
             g_req[i].cb = opt ? psp_read32(opt) : 0; g_req[i].arg = opt ? psp_read32(opt + 4) : 0;
             g_req[i].event = event; g_req[i].error = error;
             g_req[i].size = size > REQ_DATA ? REQ_DATA : size;
@@ -754,12 +761,15 @@ static void deliver_room(void) {
     g_npost = 0;
 }
 
-/* Once a frame. Request replies first; signaling, room events and room messages wait for a
- * frame with no reply, so the game has taken in a join before it hears about the room. */
+/* Once a frame. Request replies first, each once it is due (REPLY_DELAY_FRAMES); signaling,
+ * room events and room messages wait for a frame with no reply delivered or waiting, so the
+ * game has taken in a join before it hears about the room. */
 void mmo_matching2_pump(void) {
-    int replied = 0;
+    int replied = 0, waiting = 0;
+    g_frame++;
     for (int i = 0; i < MAX_REQ; i++) {
         if (!g_req[i].used) continue;
+        if ((int32_t)(g_frame - g_req[i].due) < 0) { waiting = 1; continue; }
         g_req[i].used = 0;
         if (!g_req[i].cb) continue;
         scratch();
@@ -770,7 +780,7 @@ void mmo_matching2_pump(void) {
         psp_call_guest6(g_req[i].cb, CTX_ID, g_req[i].id, g_req[i].event, (uint32_t)g_req[i].error, data, g_req[i].arg);
         replied = 1;
     }
-    if (replied) return;
+    if (replied || waiting) return;
     if (g_nsig) deliver_signaling();
     if (g_npost) deliver_room();
 }
