@@ -9,7 +9,8 @@
  * six part slots). A swap copies race, sex and the six part slots into your
  * character data; your class (and so your weapons), colours, proportions and
  * the rest stay yours. The game shows the new look the next time it
- * rebuilds your character (an armour change, or a new area).
+ * builds your character, when an area loads (an armour change does not); the
+ * F2 menu enters a lobby again at once (lobby_reenter).
  *
  * Your own appearance is kept in <base>/character_backup.txt before the first
  * swap, so CHARACTER > MY OWN CHARACTER puts it back even after the game has

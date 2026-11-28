@@ -34,6 +34,9 @@ static const uint32_t RA_EQUIP_NOTICE[] = { 0x0882A4C0u, 0x08D1EF68u, 0x08D1F29C
 
 static struct { volatile int pending; int32_t dest; int16_t idx, zone, entry; } g_warp;
 static volatile int g_weapons;
+/* The move the game last requested (game mode +536..+548 while a move is under way;
+ * the game sets them back to -1 when it is done): where this client is now. */
+static struct { int have; int32_t dest; int16_t idx, zone, entry; } g_last_move;
 static int g_entry = 4;              /* the room this client is in (the plaza, where Multi Mode starts) */
 
 int lobby_here(void) {
@@ -47,6 +50,17 @@ void lobby_warp(int32_t dest, int16_t area_index, int16_t zone, int16_t entry) {
 }
 
 int  lobby_entry(void) { return g_entry; }
+
+int lobby_reenter(void) {
+    const uint32_t m = psp_read32(AREA_MANAGER);
+    if (!m || !g_last_move.have) return -1;
+    const uint32_t type = psp_read32(m + 40);
+    const int16_t zone = (int16_t)psp_read16(m + 44);
+    if (type != LOBBY_TYPE || zone != g_last_move.zone) return -1;
+    psp_net_log("lobby: entering the area again (destination %d, zone %d, entry %d)", g_last_move.dest, zone, g_last_move.entry);
+    lobby_warp(g_last_move.dest, g_last_move.idx, g_last_move.zone, g_last_move.entry);
+    return 0;
+}
 void lobby_set_weapons(int on) { g_weapons = on ? 1 : 0; }
 int  lobby_weapons(void) { return g_weapons; }
 
@@ -61,6 +75,13 @@ static void hook_area_update(void (*original)(void)) {
         if (mode && (int32_t)psp_read32(mode + 536) == LOBBY_DEST) {
             const int32_t e = (int32_t)psp_read32(mode + 548);
             if (e >= 0 && e <= 17) g_entry = e;
+        }
+        if (mode && (int32_t)psp_read32(mode + 536) != -1) {   /* a move under way: remember it */
+            g_last_move.have = 1;
+            g_last_move.dest = (int32_t)psp_read32(mode + 536);
+            g_last_move.idx = (int16_t)psp_read32(mode + 540);
+            g_last_move.zone = (int16_t)psp_read32(mode + 544);
+            g_last_move.entry = (int16_t)psp_read32(mode + 548);
         }
     }
     if (g_warp.pending) {

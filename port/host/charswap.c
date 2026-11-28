@@ -165,7 +165,7 @@ int charswap_apply(int i, char *msg, size_t cap) {
     }
     memcpy(mine, r, 2);             /* race, sex */
     memcpy(mine + 8, r + 8, 24);    /* the six part slots; your class (+2, +3) and +4 stay yours */
-    snprintf(msg, cap, "Now %s: change your armour (or area) to see it.", g_name[i]);
+    snprintf(msg, cap, "Now %s: it shows when you next enter an area.", g_name[i]);
     fprintf(stderr, "charswap: wearing %s (record %d at %08X)\n", g_name[i], i, g_table + (uint32_t)i * REC_STRIDE);
     return 0;
 }
@@ -184,7 +184,7 @@ int charswap_restore(char *msg, size_t cap) {
     if (strcmp(name, now)) { snprintf(msg, cap, "The saved look is %s's, not this character's.", name); return -1; }
     memcpy(psp_mem_ptr(cd + CHARSWAP_APPEARANCE, APP_BYTES), app, APP_BYTES);
     remove(g_backup_path);
-    snprintf(msg, cap, "Your own look again: change your armour (or area) to see it.");
+    snprintf(msg, cap, "Your own look again: it shows when you next enter an area.");
     fprintf(stderr, "charswap: own look restored\n");
     return 0;
 }

@@ -32,6 +32,14 @@ void lobby_warp(int32_t dest, int16_t area_index, int16_t zone, int16_t entry);
  * spots in the plaza). */
 int  lobby_entry(void);
 
+/* Enter the area this client is in again: the move the game last made (its
+ * destination, area index, zone and entry, as requested), made once more, so
+ * the area loads and the player is built again from the character data (a
+ * character look from the F2 menu then shows). Only in a lobby or other
+ * area of type 2 (towns: a mission field would start over), and only when
+ * that move led to the zone this client is in. 0 when asked, -1 when not. */
+int  lobby_reenter(void);
+
 /* Weapons in the lobby. A change shows fully after re-entering the room
  * (a warp): on, the palette appears; off, drawn weapons are put away. */
 void lobby_set_weapons(int on);

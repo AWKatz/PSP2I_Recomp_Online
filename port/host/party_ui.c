@@ -123,9 +123,15 @@ static void open_menu(const psp_net_mmo_status *st, int role) {
 
 static void choose_char(int row) {
     char m[96];
-    if (row == 0) charswap_restore(m, sizeof m);
-    else if (!U.nchars) snprintf(m, sizeof m, "The partner characters aren't loaded here: try in the lobby.");
-    else charswap_apply(row - 1, m, sizeof m);
+    int ok;
+    if (row == 0) ok = charswap_restore(m, sizeof m) == 0;
+    else if (!U.nchars) { snprintf(m, sizeof m, "The partner characters aren't loaded here: try in the lobby."); ok = 0; }
+    else ok = charswap_apply(row - 1, m, sizeof m) == 0;
+    /* The look shows when the area loads again: in a lobby, enter it again now. Elsewhere (a
+     * mission would start over) the notice says when it will show. */
+    if (ok && lobby_reenter() == 0)
+        snprintf(m, sizeof m, "%s%s: entering the area again to show it.", row ? "Now " : "Your own look",
+                 row ? charswap_name(row - 1) : "");
     notice(m, 6);
     U.state = ST_HIDDEN;
 }

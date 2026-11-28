@@ -253,9 +253,9 @@ While the menu is open the game gets no input.
 
 <img width="1072" height="684" alt="Screenshot 2026-11-27 at 10 00 34 PM" src="https://github.com/user-attachments/assets/ef0f893c-40b0-4b7a-9059-aff177592bd1" />
 
-**Character looks.** Pick a character in the CHARACTER column to wear their look: their race, body and outfit. Your class, levels, weapons, colours and everything else stay yours. The game doesn't redraw you straight away: it builds your model again the next time you **change your armour** or **enter another area** (another lobby room, a mission, a new zone). A notice says so after each choice. The current look is marked `*` in the list.
+**Character looks.** Pick a character in the CHARACTER column to wear their look: their race, body and outfit. Your class, levels, weapons, colours and everything else stay yours. The game builds your model when an area loads, so the look shows then: **in a lobby, the menu enters the area again for you** at once. In a mission, it shows from the next area you enter (the menu won't reload a mission, which would start it over). Changing armour doesn't redraw you. A notice says which after each choice. The current look is marked `*` in the list.
 
-- **My own character** puts your own look back, again from your next armour change or area.
+- **My own character** puts your own look back, the same way.
 - Your own look is saved to `character_backup.txt` in the game folder before your first swap. The game saves the look you wear with your character, so if it saves while you wear someone else's, you keep that look after a restart, and My own character still brings yours back. Keep that file until you have switched back.
 - Pick a character of another race and you play as that race's body. Race may also change your stats; switch back if you'd rather not.
 - The partner characters are part of the game's data once it's loaded (the lobby, missions). On the title screen the list is empty and says so.
