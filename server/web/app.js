@@ -142,6 +142,7 @@ function render(s) {
     el('td', {}, p.name),
     el('td', {}, p.account_id ?? '—'),
     el('td', { class: 'mono' }, p.ip),
+    el('td', { class: 'mono' }, p.lan_ip || '—'),
     el('td', {}, p.ping_ms >= 0 ? p.ping_ms + ' ms' : '—'),
     el('td', {}, dur(p.online_s)),
     el('td', {}, p.location),

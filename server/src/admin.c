@@ -271,8 +271,8 @@ int admin_exec(admin_ctx *a, const char *actor, const char *line, char *out, siz
         const int n = srv_players(a->s, pl, 64);
         size_t o = (size_t)snprintf(out, cap, "%d player%s", n, n == 1 ? "" : "s");
         for (int i = 0; i < n && o < cap; i++)
-            o += (size_t)snprintf(out + o, cap - o, "\n  %3llu  %-20s %-21s %4d ms  %s", (unsigned long long)pl[i].session, pl[i].name,
-                                  pl[i].ip, pl[i].ping_ms, pl[i].mac);
+            o += (size_t)snprintf(out + o, cap - o, "\n  %3llu  %-20s %-21s %-15s %4d ms  %s", (unsigned long long)pl[i].session, pl[i].name,
+                                  pl[i].ip, pl[i].lan_ip[0] ? pl[i].lan_ip : "-", pl[i].ping_ms, pl[i].mac);
         return 0;
     }
     if (!strcmp(cmd, "kick")) {

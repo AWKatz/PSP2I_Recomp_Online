@@ -1047,6 +1047,10 @@ int srv_players(const srv *s, srv_player *out, int max) {
         memcpy(p->name, ss->name, sizeof p->name);
         snprintf(p->mac, sizeof p->mac, "%02X:%02X:%02X:%02X:%02X:%02X", ss->mac[0], ss->mac[1], ss->mac[2], ss->mac[3], ss->mac[4], ss->mac[5]);
         psp_net_enet_peer_address(s->enet, ss->id, p->ip, sizeof p->ip);
+        if (ss->lan_addr) {
+            const uint8_t *la = (const uint8_t *)&ss->lan_addr;
+            snprintf(p->lan_ip, sizeof p->lan_ip, "%u.%u.%u.%u", la[0], la[1], la[2], la[3]);
+        }
         p->ping_ms = psp_net_enet_peer_rtt(s->enet, ss->id);
         p->joined_ms = ss->joined_ms;
         snprintf(p->location, sizeof p->location, "-");

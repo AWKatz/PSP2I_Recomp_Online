@@ -144,10 +144,12 @@ static int cl_connect(client *c, uint16_t port) {
     char addr[32];
     snprintf(addr, sizeof addr, "127.0.0.1:%u", port);
     if (t->initialize(t->ctx, mac) != PSP_NET_OK || t->join_session(t->ctx, addr, "PSP2I") != PSP_NET_OK) return 0;
-    uint8_t hs[PSP_MMO_HANDSHAKE_LEN] = { 0 };
+    uint8_t hs[PSP_MMO_HANDSHAKE_LAN_LEN] = { 0 };
     psp_mmo_put_hdr(hs, MSG_C2S_HANDSHAKE);
     memcpy(hs + 8, mac, 6);
     memcpy(hs + 14, "Watcher", 7);
+    const uint8_t lan[4] = { 192, 168, 86, 250 };          /* its own address on its network */
+    memcpy(hs + PSP_MMO_HANDSHAKE_LEN, lan, 4);
     const psp_net_peer host = { { 0 }, 1 };
     t->send_packet(t->ctx, &host, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, hs, sizeof hs);
     for (int i = 0; i < 300 && !c->acked; i++) cl_pump(c, 5);
@@ -217,6 +219,7 @@ int main(void) {
     client c;
     CHECK(cl_connect(&c, srv_port(g_s)) && c.status == PSP_MMO_OK && c.events_msgs == 1);
     CHECK(http("GET", "/api/v1/status", tok, NULL, &r) == 200 && strstr(r.body, "\"name\":\"Watcher\"") && strstr(r.body, "\"ping_ms\":"));
+    CHECK(strstr(r.body, "\"lan_ip\":\"192.168.86.250\"") != NULL);     /* the panel's Local IP column */
     char session[24] = "";
     { const char *p = strstr(r.body, "\"session\":"); if (p) snprintf(session, sizeof session, "%llu", strtoull(p + 10, NULL, 10)); }
     CHECK(session[0] && strcmp(session, "0"));

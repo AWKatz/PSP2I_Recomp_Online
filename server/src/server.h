@@ -91,7 +91,8 @@ typedef struct {
     uint64_t session;
     char     name[33];
     char     mac[18];
-    char     ip[64];                  /* "ip:port" */
+    char     ip[64];                  /* "ip:port", as the server sees it (a router's, behind one) */
+    char     lan_ip[16];              /* its own address on its network, as the game reported it ("" = not reported) */
     int      ping_ms;                 /* -1 unknown */
     uint64_t joined_ms;               /* srv_tick time of the handshake */
     int64_t  account_id;              /* 0 until accounts log in through the game */

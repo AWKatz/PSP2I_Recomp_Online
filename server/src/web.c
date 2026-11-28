@@ -266,9 +266,9 @@ static char *status_json(web *w) {
         jesc(nm, sizeof nm, pl[i].name);
         jesc(loc, sizeof loc, pl[i].location);
         if (pl[i].account_id) snprintf(acc, sizeof acc, "%lld", (long long)pl[i].account_id); else snprintf(acc, sizeof acc, "null");
-        o += (size_t)snprintf(j + o, cap - o, "%s{\"session\":%llu,\"name\":\"%s\",\"account_id\":%s,\"ip\":\"%s\",\"mac\":\"%s\","
+        o += (size_t)snprintf(j + o, cap - o, "%s{\"session\":%llu,\"name\":\"%s\",\"account_id\":%s,\"ip\":\"%s\",\"lan_ip\":\"%s\",\"mac\":\"%s\","
                               "\"ping_ms\":%d,\"online_s\":%llu,\"location\":\"%s\"}",
-                              i ? "," : "", (unsigned long long)pl[i].session, nm, acc, pl[i].ip, pl[i].mac, pl[i].ping_ms,
+                              i ? "," : "", (unsigned long long)pl[i].session, nm, acc, pl[i].ip, pl[i].lan_ip, pl[i].mac, pl[i].ping_ms,
                               (unsigned long long)((w->now_ms > pl[i].joined_ms ? w->now_ms - pl[i].joined_ms : 0) / 1000), loc);
     }
     snprintf(j + o, cap - o, "]}");
