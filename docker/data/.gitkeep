@@ -1,0 +1,2 @@
+# The container's /data: psp2i_server.db and config/ (docker/README.md). Kept in git as an empty
+# folder because Synology's Container Manager will not mount a folder that does not exist yet.

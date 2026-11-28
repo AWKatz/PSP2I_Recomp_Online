@@ -132,4 +132,5 @@ TEXTURES/
 .claude/settings.local.json
 
 # psp2i_server container data (docker/README.md)
-docker/data/
+docker/data/*
+!docker/data/.gitkeep

@@ -104,6 +104,7 @@ The project in Container Manager shows the same container afterwards.
 - **`CMake Error: The source directory "/src/server" does not appear to contain CMakeLists.txt`**, or the build stops with "Missing server/CMakeLists.txt": the `server/` folder on the NAS isn't the source folder. It's most likely the game folder's `server/` (the built program and config only). Replace it with the repository's `server/` folder.
 - **`Failed to clone repository: 'https://github.com/lsalzman/enet.git'`**: an older `docker/Dockerfile`, which still downloaded ENet. Copy the current `docker/` folder, including `docker/third_party/enet/`, and build again.
 - **`cp: omitting directory '/usr/local/share/psp2i_server/config/@eaDir'`**, and the container stops: an old image. Synology's indexing service puts `@eaDir` folders in shared folders, and the first version copied them as config. Update and rebuild as above.
+- **The container can't mount `docker/data` because it doesn't exist:** a copy from before the folder was part of the repository. Create the empty folder `docker/data` next to `docker/Dockerfile` (or `git pull`) and start again.
 - **A failure in `apk add`**: the NAS couldn't reach Alpine's package mirrors. Check its internet access and DNS, then build again.
 
 ## Without Synology
