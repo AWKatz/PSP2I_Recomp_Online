@@ -592,7 +592,12 @@ static void on_np2_room_msg(srv *s, session *ss, const psp_net_packet *p) {
      * in the room (sent earlier, the game drops them: "not PadPlayer"). */
     /* ... and the others' own requests, sent while this player's game could not answer them yet:
      * it answers each by broadcasting its character data, which is how the others get it. */
-    if (cat == ROOM_CAT_CHARA_REQ && !ss->lobby_ready) {
+    /* Every request, not just the first: a game that enters the room's area again (the F2 menu
+     * does, to show a new character look) builds the other players again and asks again. It
+     * gets their data back, and their requests, which it answers with its own data as it is
+     * now: the others then hear about its new look. */
+    if (cat == ROOM_CAT_CHARA_REQ) {
+        if (ss->lobby_ready) slog(s, "rooms: '%s' asked for the others' character data again", ss->name);
         ss->lobby_ready = 1;
         room_replay(s, ss, ROOM_CAT_LOBBY_PACKET);
         room_replay(s, ss, ROOM_CAT_CHARA_REQ);
