@@ -1,0 +1,31 @@
+# psp2i_server for Synology Container Manager (Project) or `docker compose up -d`.
+# See docker/README.md. This file sits at the repository's top, next to psprecomp/, server/ and
+# docker/: the build uses this folder as its context. The server's data goes to docker/data/.
+services:
+  psp2i-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: psp2i-server:latest
+    container_name: psp2i-server
+    restart: unless-stopped
+    stop_grace_period: 15s
+    # The host's network: LAN discovery (the game finds the server by itself) needs the LAN's
+    # broadcasts, which Docker's own networks don't pass on. The ports below are then the NAS's.
+    network_mode: host
+    environment:
+      TZ: "UTC"
+      # Your DSM user's ids (DSM: Control Panel > Terminal & SNMP, ssh in, run `id`), so the files in
+      # data/ are yours. Leave them out to run as root.
+      # PUID: "1026"
+      # PGID: "100"
+      # The web panel's first admin account: created at start if it doesn't exist yet. Remove these two
+      # lines once you have signed in (the password is visible in the container's settings).
+      PSP2I_ADMIN_USER: "admin"
+      PSP2I_ADMIN_PASSWORD: "change-me-please"
+    volumes:
+      - ./docker/data:/data
+    # The server's options (psp2i_server --help). --web-bind 0.0.0.0: the panel is reachable from your
+    # LAN at http://<NAS address>:8080/ (8080: change it if another app on the NAS uses that port).
+    # For players outside your home, use --online and forward UDP 29001 on your router.
+    command: ["--lan", "--name", "PSP2i Server", "--web-port", "8080", "--web-bind", "0.0.0.0"]

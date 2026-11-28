@@ -75,6 +75,26 @@ HD textures use PPSSPP's pack format and hashing, so PPSSPP packs work as they a
 
 Other Windows build scripts: `build_port.bat regen` (regenerates the game code first) and `build_prod.bat` (the community build in `build\prod\`). The older Windows layout, with the extracted disc in `GameData\disc\`, still works; see [port/prod_README.txt](port/prod_README.txt).
 
+### Quick Start: the server in Docker (a NAS, a home server)
+
+The server can also run on its own, always on, in a container: on a Synology NAS with Container Manager, or on any machine with Docker. It needs no game files, and the web admin panel works from the container too. The image is built from source on the machine that runs it.
+
+1. **Get the repository onto that machine**, for example in a Synology shared folder `docker/psp2i`:
+
+   ```sh
+   git clone https://github.com/AWKatz/PSP2I_Recomp_Online.git psp2i
+   ```
+
+2. **Set the web panel's admin password** in `docker-compose.yml` at the repository's top (`PSP2I_ADMIN_PASSWORD`, at least 8 characters).
+
+3. **Build and start it:**
+   - **Synology:** Container Manager > Project > Create. Path: the cloned folder (the one holding `docker-compose.yml`). Source: **Use existing docker-compose.yml**.
+   - **Docker elsewhere:** `docker compose up -d --build` in the cloned folder.
+
+4. **Open the admin panel** at `http://<server address>:8080/` and sign in. Then remove the two `PSP2I_ADMIN_*` lines from `docker-compose.yml` and rebuild.
+
+Games on the same network find the server by themselves. To join from elsewhere, set `server_ip` in `client_config.toml`. The server keeps its database and config in `docker/data/`. To update it, `git pull` and rebuild. Players outside your home, HTTPS for the panel, backups and troubleshooting: [docker/README.md](docker/README.md).
+
 
 ### Frame rate and resolution
 
@@ -128,6 +148,8 @@ cmake -S server -B build/server -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build/server    # the server alone, any OS: build/server/psp2i_server
 cd build/PSP2i_macOS/server && ./psp2i_server --lan    # run it where config/ is, or pass --drop-tables/--rates
 ```
+
+To run the server persistently in a container (a Synology NAS's Container Manager, or any Docker host), web panel included, see [the Docker quick start](#quick-start-the-server-in-docker-a-nas-a-home-server) and [docker/README.md](docker/README.md).
 
 `psp2i_server` options:
 

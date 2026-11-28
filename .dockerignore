@@ -1,0 +1,16 @@
+# docker/Dockerfile builds psp2i_server from psprecomp/ and server/ only. What's listed here stays
+# out of the build: the game and its files, builds, and the container's own data. A plain list of
+# exclusions (no "*" with re-includes), which every Docker builder reads the same way.
+.git/
+build/
+**/build/
+**/build-*/
+docker/data/
+port/
+asset/
+*.iso
+EBOOT.BIN
+GameData/
+NPJH50332/
+TEXTURES/
+Output/
