@@ -14,3 +14,8 @@ GameData/
 NPJH50332/
 TEXTURES/
 Output/
+# a NAS's own metadata folders and files (Synology indexing, macOS)
+**/@eaDir/
+**/#recycle/
+**/.DS_Store
+**/._*

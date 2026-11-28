@@ -12,6 +12,7 @@ DEFAULTS=/usr/local/share/psp2i_server/config
 
 mkdir -p "$DATA/config"
 for f in "$DEFAULTS"/*; do
+    [ -f "$f" ] || continue        # files only: a NAS's own folders (Synology's @eaDir) are not config
     name=$(basename "$f")
     [ -e "$DATA/config/$name" ] || cp "$f" "$DATA/config/$name"
 done

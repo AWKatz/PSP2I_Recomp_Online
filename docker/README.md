@@ -89,6 +89,7 @@ You need DSM 7.2 or later with **Container Manager** installed (Package Center).
 - **`unable to prepare context: unable to evaluate symlinks in Dockerfile path: lstat /volume1/docker/...`**: Docker didn't find `docker/Dockerfile` in the project's folder. Check that the project's path is the folder holding `docker-compose.yml`, and that `docker/Dockerfile` sits next to it, as in the layout in step 1 (names are case-sensitive). The full path in the message shows where Docker looked.
 - **`CMake Error: The source directory "/src/server" does not appear to contain CMakeLists.txt`**, or the build stops with "Missing server/CMakeLists.txt": the `server/` folder on the NAS isn't the source folder. It's most likely the game folder's `server/` (the built program and config only). Replace it with the repository's `server/` folder.
 - **`Failed to clone repository: 'https://github.com/lsalzman/enet.git'`**: an older `docker/Dockerfile`, which still downloaded ENet. Copy the current `docker/` folder, including `docker/third_party/enet/`, and build again.
+- **`cp: omitting directory '/usr/local/share/psp2i_server/config/@eaDir'`**, and the container stops: an older `docker/entrypoint.sh`. Synology's indexing service puts `@eaDir` folders in shared folders, and the old script tried to copy them as config. `git pull` and build again.
 - **A failure in `apk add`**: the NAS couldn't reach Alpine's package mirrors. Check its internet access and DNS, then build again.
 
 ## Without Synology
