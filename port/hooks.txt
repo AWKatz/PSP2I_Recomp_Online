@@ -63,3 +63,5 @@
 0x08A2C0E4   # lobby: a check 0x08A2594C makes before sending (logged on change)
 0x08A2B940   # lobby: a check 0x08A2594C makes before sending (logged on change)
 0x08CB687C   # TPspNpMatching2: send a lobby packet to one member, 0 = all (logged on change)
+0x08A4B43C   # player: can it take this item (player, item reference) -- the equip step's last check; logged with PSP2I_WEAPON_TRACE=1 (host/lobby.c)
+0x08ACD844   # item reference -> item object (type 0x100000), else 0; logged from the equip path with PSP2I_WEAPON_TRACE=1 (host/lobby.c)

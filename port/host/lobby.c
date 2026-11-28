@@ -182,7 +182,49 @@ static void hook_table_request(void (*original)(void)) {
     original();
 }
 
+/* Research (PSP2I_WEAPON_TRACE=1): why a weapon is not put on the player in Internet Multi
+ * Mode's lobbies with "weapons in the lobby" on. The equip step (0x08ABC5E4) ends in
+ * 0x08A4B43C(player, item reference), which needs 0x08ACD844(reference) to find the item's
+ * object: the reference translated by the session's table (*0x08ED8CA0, 0x08AB25B8) into an
+ * object id, and that object (0x089F628C) of type 0x100000 (+28). In Multi Mode it is found;
+ * in Internet Multi Mode not. Each step is logged, from the equip path only. */
+#define FN_CAN_TAKE_ITEM   0x08A4B43Cu
+#define FN_ITEM_OBJECT     0x08ACD844u
+#define FN_REF_TO_ID       0x08AB25B8u
+#define FN_OBJECT_BY_ID    0x089F628Cu
+#define REF_TABLE          0x08ED8CA0u
+#define RA_FROM_CAN_TAKE   0x08A4B458u    /* 0x08ACD844 called by 0x08A4B43C */
+#define RA_FROM_EQUIP      0x08A4B4B8u    /* ... and by 0x08A4B4A0, the equip itself */
+
+static void hook_can_take(void (*original)(void)) {
+    const uint32_t player = psp_cpu.r[4], ref = psp_cpu.r[5], ra = psp_cpu.r[31];
+    original();
+    psp_net_log("weapons: can player %08X take item reference %08X? -> %u  (from %08X; weapons %s, area type %u zone %d, %s)",
+                player, ref, psp_cpu.r[2], ra, g_weapons ? "on" : "off", psp_read32(psp_read32(AREA_MANAGER) + 40),
+                (int16_t)psp_read16(psp_read32(AREA_MANAGER) + 44), psp_net_mmo_np2_in_room() ? "Internet Multi Mode" : "not in a matching room");
+}
+
+static void hook_item_object(void (*original)(void)) {
+    const uint32_t ref = psp_cpu.r[4], ra = psp_cpu.r[31];
+    original();
+    if (ra != RA_FROM_CAN_TAKE && ra != RA_FROM_EQUIP) return;
+    const uint32_t found = psp_cpu.r[2];
+    /* the same steps again, read-only, to see which one fails */
+    const uint32_t table = psp_read32(REF_TABLE);
+    const uint32_t id = psp_call_guest(FN_REF_TO_ID, ref, 0, 0);
+    const uint32_t obj = id != 0xFFFFFFFFu ? psp_call_guest(FN_OBJECT_BY_ID, id, 0, 0) : 0;
+    psp_cpu.r[2] = found;
+    psp_net_log("weapons: item reference %08X -> table %08X -> object id %08X -> object %08X (type +28 = %08X, vtable %08X) -> %s",
+                ref, table, id, obj, obj ? psp_read32(obj + 28) : 0, obj ? psp_read32(obj) : 0,
+                found ? "found" : id == 0xFFFFFFFFu ? "NOT FOUND: the reference isn't in the table"
+                      : !obj ? "NOT FOUND: no object with that id" : "NOT FOUND: the object isn't an item (type 0x100000)");
+}
+
 void lobby_init(void) {
+    if (getenv("PSP2I_WEAPON_TRACE")) {
+        psp_hook_set(FN_CAN_TAKE_ITEM, hook_can_take);
+        psp_hook_set(FN_ITEM_OBJECT, hook_item_object);
+    }
     if (getenv("PSP2I_QUEST_TRACE")) {
         psp_hook_set(0x08D25714u, hook_quest_table);
         psp_hook_set(0x0888B62Cu, hook_table_request);
