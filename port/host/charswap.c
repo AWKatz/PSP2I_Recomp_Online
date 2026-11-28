@@ -215,12 +215,18 @@ int charswap_restore(char *msg, size_t cap) {
     }
     my_name(cd, now, sizeof now);
     if (strcmp(name, now)) { snprintf(msg, cap, "The saved look is %s's, not this character's.", name); return -1; }
+    if (same_look((const uint8_t *)psp_mem_ptr(cd + CHARSWAP_APPEARANCE, APP_BYTES), app)) {
+        snprintf(msg, cap, "You're already wearing your own look.");
+        return -1;
+    }
     uint8_t *mine = (uint8_t *)psp_mem_ptr(cd + CHARSWAP_APPEARANCE, APP_BYTES);
     uint8_t old[APP_BYTES];
     memcpy(old, mine, APP_BYTES);
     memcpy(mine, app, APP_BYTES);
     const int copies = patch_copies(cd, old, app);
-    remove(g_backup_path);
+    /* The backup stays: the game keeps the look it saved last, so after a restart without a save
+     * since, the partner's look is back -- and so must the way home be. A swap from your own
+     * look writes it again. */
     snprintf(msg, cap, "Your own look again: it shows when you next enter an area.");
     fprintf(stderr, "charswap: own look restored (%d other cop%s too)\n", copies, copies == 1 ? "y" : "ies");
     return 0;

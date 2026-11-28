@@ -112,13 +112,13 @@ int main(void) {
     uint8_t after[32];
     psp_mem_read_block(after, CD + CHARSWAP_APPEARANCE, 32);
     CHECK(!memcmp(before, after, 32));
+    CHECK(charswap_have_backup());                        /* kept: a restart may bring the saved swap back */
     {   /* the copy has the own look back too */
         uint8_t c[32];
         psp_mem_read_block(c, COPY + 0x80, 32);
         CHECK(!memcmp(c, before, 32));
     }
-    CHECK(!charswap_have_backup());
-    CHECK(charswap_restore(msg, sizeof msg) != 0);        /* nothing to put back */
+    CHECK(charswap_restore(msg, sizeof msg) != 0 && strstr(msg, "already"));   /* already your own look */
 
     /* the backup belongs to another character: refused */
     put_record(0, "Emilia", "Emilia Percival", 0, 1, 0x13A7);

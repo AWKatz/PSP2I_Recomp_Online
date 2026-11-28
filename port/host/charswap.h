@@ -12,9 +12,10 @@
  * builds your character, when an area loads (an armour change does not); the
  * F2 menu enters a lobby again at once (lobby_reenter).
  *
- * Your own appearance is kept in <base>/character_backup.txt before the first
- * swap, so CHARACTER > MY OWN CHARACTER puts it back even after the game has
- * saved a swapped look and been restarted. */
+ * Your own appearance is kept in <base>/character_backup.txt at each swap made
+ * from it, and the file stays, so CHARACTER > MY OWN CHARACTER puts it back even
+ * after the game has saved a swapped look, or was restarted before saving your
+ * own look again. */
 #ifndef PSP2I_CHARSWAP_H
 #define PSP2I_CHARSWAP_H
 

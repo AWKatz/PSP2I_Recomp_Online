@@ -259,7 +259,7 @@ While the menu is open the game gets no input.
 **Character looks.** Pick a character in the CHARACTER tab to wear their look: their race, body and outfit. Your class, levels, weapons, colours and everything else stay yours. The game builds your model when an area loads, so the look shows then: **in a lobby, the menu enters the area again for you** at once. In a mission, it shows from the next area you enter (the menu won't reload a mission, which would start it over). Changing armour doesn't redraw you. A notice says which after each choice. The current look is marked `*` in the list.
 
 - **My own character** puts your own look back, the same way.
-- Your own look is saved to `character_backup.txt` in the game folder before your first swap. The game saves the look you wear with your character, so if it saves while you wear someone else's, you keep that look after a restart, and My own character still brings yours back. Keep that file until you have switched back.
+- Your own look is saved to `character_backup.txt` in the game folder before your first swap. The game saves the look you wear with your character, so if it saves while you wear someone else's, you keep that look after a restart, and My own character still brings yours back. Leave that file where it is: it's how the menu finds your look again, including after a restart.
 - Pick a character of another race and you play as that race's body. Race may also change your stats; switch back if you'd rather not.
 - The partner characters are part of the game's data once it's loaded (the lobby, missions). On the title screen the list is empty and says so.
 
