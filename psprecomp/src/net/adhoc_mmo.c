@@ -29,6 +29,9 @@
 #endif
 
 static char g_server[128] = "127.0.0.1:29001";
+/* An older server refuses the handshake that carries our own address: then we connect again
+ * at once with the older handshake, and keep using it with this server. */
+static int g_hs_legacy, g_hs_retry;
 static char g_name[PSP_MMO_NAME_LEN] = "PSP2i";
 static char g_version[PSP_MMO_VERSION_LEN] = "psp2i-mmo";
 static int  g_joined;
@@ -128,6 +131,7 @@ static int mmo_connect(void) {
     if (t->join_session(t->ctx, g_server, "PSP2I") != PSP_NET_OK) { psp_net_log("mmo: could not reach %s", g_server); return -1; }
 
     uint8_t m[PSP_MMO_HANDSHAKE_LAN_LEN];
+    const uint32_t mlen = g_hs_legacy ? PSP_MMO_HANDSHAKE_LEN : PSP_MMO_HANDSHAKE_LAN_LEN;
     psp_mmo_put_hdr(m, MSG_C2S_HANDSHAKE);
     memcpy(m + PSP_MMO_HDR_LEN, mac, 6);
     psp_mmo_put_str(m + PSP_MMO_HDR_LEN + 6, g_name, PSP_MMO_NAME_LEN);
@@ -139,9 +143,9 @@ static int mmo_connect(void) {
         a[0] = (uint8_t)(ip >> 24); a[1] = (uint8_t)(ip >> 16); a[2] = (uint8_t)(ip >> 8); a[3] = (uint8_t)ip;
     }
     psp_net_peer server = { { 0 }, 1 };   /* the host: id 1 */
-    const int rc = t->send_packet(t->ctx, &server, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, m, sizeof m);
+    const int rc = t->send_packet(t->ctx, &server, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, m, mlen);
     psp_net_log("mmo: sent MSG_C2S_HANDSHAKE to %s (%u bytes, mac %02X:%02X:%02X:%02X:%02X:%02X, name '%s') -> %d",
-                g_server, (unsigned)sizeof m, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], g_name, rc);
+                g_server, (unsigned)mlen, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], g_name, rc);
     g_joined = rc == PSP_NET_OK;
     if (g_joined && g_party_role) party_send();
     return g_joined ? 0 : -1;
@@ -415,6 +419,11 @@ static void on_packet(const psp_net_packet *p, void *user) {
         uint64_t sid = 0; for (int i = 7; i >= 0; i--) sid = (sid << 8) | d[4 + i];
         g_session = sid;
         psp_net_log("mmo: MSG_S2C_HANDSHAKE_ACK status %u, session %llu", status, (unsigned long long)sid);
+        if (status == PSP_MMO_ERR_VERSION && !g_hs_legacy) {
+            g_hs_legacy = g_hs_retry = 1;
+            psp_net_log("mmo: the server refused the newer handshake: it's an older server; connecting again with the older one "
+                        "(players behind the same router may not reach each other until the server is updated)");
+        }
     } else if (type == MSG_S2C_SERVER_TEXT) {
         on_server_text(p->data, p->len);
     } else if (type >= MSG_S2C_NP2_REPLY && type <= MSG_S2C_NP2_ROOM_MSG) {
@@ -446,6 +455,7 @@ static void poll_server(void) {
         g_joined = 0;
         g_session = 0;
         mmo_matching2_reset();
+        if (g_hs_retry) { g_hs_retry = 0; mmo_connect(); }
     }
 }
 

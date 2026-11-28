@@ -28,19 +28,29 @@ static uint32_t call(uint32_t nid, uint32_t a0, uint32_t a1, uint32_t a2) {
 
 /* the server */
 static psp_net_enet *g_srv;
-static int g_handshakes;
+static int g_handshakes, g_old_server, g_refused;
+static uint32_t g_hs_len;                 /* the length of the last handshake accepted */
 static char g_name[PSP_MMO_NAME_LEN + 1];
 static uint8_t g_mac[6];
 static void srv_rx(const psp_net_packet *p, void *u) {
     (void)u;
-    if (p->port != PSP_MMO_CTRL_PORT || psp_mmo_type(p->data, p->len) != MSG_C2S_HANDSHAKE || p->len != PSP_MMO_HANDSHAKE_LEN) return;
-    g_handshakes++;
-    memcpy(g_mac, p->data + PSP_MMO_HDR_LEN, 6);
-    memcpy(g_name, p->data + PSP_MMO_HDR_LEN + 6, PSP_MMO_NAME_LEN);
+    if (p->port != PSP_MMO_CTRL_PORT || psp_mmo_type(p->data, p->len) != MSG_C2S_HANDSHAKE) return;
+    const psp_net_transport *t = psp_net_enet_transport(g_srv);
     uint8_t ack[PSP_MMO_HANDSHAKE_ACK_LEN] = { 0 };
     psp_mmo_put_hdr(ack, MSG_S2C_HANDSHAKE_ACK);
+    if (p->len != PSP_MMO_HANDSHAKE_LEN && (g_old_server || p->len != PSP_MMO_HANDSHAKE_LAN_LEN)) {
+        /* as an older server does: status 1 (ERR_VERSION), then the player is dropped */
+        ack[PSP_MMO_HDR_LEN] = PSP_MMO_ERR_VERSION;
+        t->send_packet(t->ctx, &p->from, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, ack, sizeof ack);
+        psp_net_enet_disconnect(g_srv, p->from.id, 2);
+        g_refused++;
+        return;
+    }
+    g_handshakes++;
+    g_hs_len = p->len;
+    memcpy(g_mac, p->data + PSP_MMO_HDR_LEN, 6);
+    memcpy(g_name, p->data + PSP_MMO_HDR_LEN + 6, PSP_MMO_NAME_LEN);
     for (int i = 0; i < 8; i++) ack[PSP_MMO_HDR_LEN + 4 + i] = (uint8_t)(p->from.id >> (8 * i));
-    const psp_net_transport *t = psp_net_enet_transport(g_srv);
     t->send_packet(t->ctx, &p->from, PSP_NET_CH_RELIABLE, PSP_MMO_CTRL_PORT, ack, sizeof ack);
 }
 static void srv_pump(void *u) { (void)u; const psp_net_transport *t = psp_net_enet_transport(g_srv); t->poll_packets(t->ctx, srv_rx, NULL); }
@@ -83,6 +93,7 @@ int main(void) {
     CHECK(call(0xE26F226E, 0x2000, 0x30, 0) == 0);              /* sceNetAdhocctlInit -> join + handshake */
     for (int i = 0; i < 200 && !g_handshakes; i++) srv_pump(NULL);
     CHECK(g_handshakes == 1);
+    CHECK(g_hs_len == PSP_MMO_HANDSHAKE_LAN_LEN);               /* with our own address */
     CHECK(strcmp(g_name, "Tester") == 0);
     uint8_t mac[6]; psp_net_ether_addr(mac);
     CHECK(memcmp(g_mac, mac, 6) == 0);
@@ -91,6 +102,20 @@ int main(void) {
     CHECK(call(0xE26F226E, 0x2000, 0x30, 0) == 0);              /* a second Init does not join twice */
     for (int i = 0; i < 50; i++) srv_pump(NULL);
     CHECK(g_handshakes == 1);
+
+    /* An older server refuses the longer handshake: the client connects again at once with
+     * the older one, and is in. */
+    g_old_server = 1;
+    psp_net_enet_disconnect_all(g_srv, 6);
+    for (int i = 0; i < 200 && psp_net_mmo_connected(); i++) { srv_pump(NULL); psp_net_mmo_pump(); }
+    CHECK(!psp_net_mmo_connected());
+    g_acked = 0;
+    CHECK(call(0xE26F226E, 0x2000, 0x30, 0) == 0);              /* the game's next way in: connects again */
+    for (int i = 0; i < 400 && !(g_handshakes == 2 && g_acked); i++) { srv_pump(NULL); psp_net_mmo_pump(); }
+    CHECK(g_refused == 1);
+    CHECK(g_handshakes == 2);
+    CHECK(g_hs_len == PSP_MMO_HANDSHAKE_LEN);
+    CHECK(g_acked);
 
     psp_net_set_transport(NULL);
     psp_net_enet_destroy(cli);
