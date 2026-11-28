@@ -7,6 +7,8 @@
 #   - then the server, from /data, with the container's arguments (compose "command"), console off.
 set -e
 
+echo "psp2i-server container (entrypoint 2026-11-28b): starting"
+
 DATA=/data
 DEFAULTS=/usr/local/share/psp2i_server/config
 

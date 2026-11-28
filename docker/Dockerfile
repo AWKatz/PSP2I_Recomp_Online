@@ -26,6 +26,9 @@ FROM alpine:3.20
 RUN apk add --no-cache su-exec tzdata
 COPY --from=build /build/psp2i_server /usr/local/bin/psp2i_server
 COPY server/config /usr/local/share/psp2i_server/config
+# Only the config files: a NAS's own folders (Synology's @eaDir) out, whatever the build context held
+RUN find /usr/local/share/psp2i_server/config -mindepth 1 ! -type f -prune -exec rm -rf {} + \
+ && ls /usr/local/share/psp2i_server/config
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod 755 /usr/local/bin/entrypoint.sh
 
