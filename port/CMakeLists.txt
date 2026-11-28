@@ -17,6 +17,12 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 set(PSPRECOMP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../psprecomp CACHE PATH "psprecomp toolkit source")
+# Online play is always built in on the desktop (there is no offline build):
+# a cache left from an old offline build is switched on again.
+if(DEFINED ENABLE_MMO_NET AND NOT ENABLE_MMO_NET)
+    message(WARNING "ENABLE_MMO_NET=OFF is no longer supported: building with online play")
+endif()
+set(ENABLE_MMO_NET ON CACHE BOOL "Build the online client (always on for the desktop builds)" FORCE)
 add_subdirectory(${PSPRECOMP_DIR} psprecomp EXCLUDE_FROM_ALL)
 
 option(PSP2I_TRACE "Build the generated code with function-entry tracing" OFF)
@@ -67,7 +73,7 @@ if(BUILD_DEDICATED_SERVER)   # the dedicated server, next to the game
 endif()
 target_link_libraries(psp2i PRIVATE psprecomp psp2i_savecrypt)
 if(ENABLE_MMO_NET)   # psprecomp's option: the MMO client (client_config.toml next to the exe)
-    target_sources(psp2i PRIVATE host/mmo_client.c host/party_ui.c host/lobby.c host/infra.c)
+    target_sources(psp2i PRIVATE host/mmo_client.c host/party_ui.c host/charswap.c host/lobby.c host/infra.c)
 endif()
 
 if(MSVC)
@@ -148,6 +154,10 @@ add_executable(test_menu tests/test_menu.c host/menu.c host/postfx.c host/framer
 target_include_directories(test_menu PRIVATE host)
 target_link_libraries(test_menu PRIVATE psprecomp)
 add_test(NAME test_menu COMMAND test_menu)
+add_executable(test_charswap tests/test_charswap.c host/charswap.c)
+target_include_directories(test_charswap PRIVATE host)
+target_link_libraries(test_charswap PRIVATE psprecomp)
+add_test(NAME test_charswap COMMAND test_charswap)
 
 if(PSP2I_TRACE)
     target_compile_definitions(psp2i PRIVATE PSPRECOMP_TRACE)

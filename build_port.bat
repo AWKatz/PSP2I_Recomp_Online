@@ -1,12 +1,11 @@
 @echo off
-rem Build PSP2i for Windows (with online play, and the server). Everything needed to play ends up
+rem Build PSP2i for Windows (with online play, and the server; there is no offline build). Everything needed to play ends up
 rem in build\PSP2i_Windows\; put your EBOOT.BIN, game .iso and NPJH50332\ save folder in its root.
 rem
 rem   build_port.bat           compile (what you want most of the time)
 rem   build_port.bat regen     first build the recompiler and generate build\gen from EBOOT.BIN
 rem                            (needed the first time, and after changing port\hooks.txt,
 rem                            port\fixes.txt or the recompiler)
-rem   build_port.bat offline   the game without online play
 rem
 rem Needs Visual Studio (C++ workload, which includes CMake) or CMake on the PATH.
 rem Nothing here copies into build\dist or prod; see build_finalbuild.bat / build_prod.bat.
@@ -39,9 +38,6 @@ set "OUT=build\windows"
 set "OPTS=-DENABLE_MMO_NET=ON -DBUILD_DEDICATED_SERVER=ON"
 set "TARGETS=psp2i psp2i_server"
 for %%A in (%*) do if /i "%%~A"=="regen" set "REGEN=1"
-for %%A in (%*) do if /i "%%~A"=="offline" set "OUT=build\windows-offline"
-if /i "%OUT%"=="build\windows-offline" set "OPTS=-DENABLE_MMO_NET=OFF -DBUILD_DEDICATED_SERVER=OFF"
-if /i "%OUT%"=="build\windows-offline" set "TARGETS=psp2i"
 if not defined REGEN if not exist "build\gen\recomp_funcs.c" set "REGEN=1"
 if not defined REGEN goto build
 

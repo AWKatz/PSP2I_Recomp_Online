@@ -5,6 +5,12 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
+# Online play is always built in on the desktop (there is no offline build):
+# a cache left from an old offline build is switched on again.
+if(DEFINED ENABLE_MMO_NET AND NOT ENABLE_MMO_NET)
+    message(WARNING "ENABLE_MMO_NET=OFF is no longer supported: building with online play")
+endif()
+set(ENABLE_MMO_NET ON CACHE BOOL "Build the online client (always on for the desktop builds)" FORCE)
 add_subdirectory(${PORT}/../psprecomp psprecomp EXCLUDE_FROM_ALL)
 add_subdirectory(${PORT}/atrac_dll atrac_dll)
 # The C generated from your EBOOT.BIN (build_macos.sh / build_flatpak.sh make it).
@@ -39,6 +45,10 @@ enable_testing()   # PSP savedata crypto against a PPSSPP-written PARAM.SFO (por
 add_executable(test_savecrypt EXCLUDE_FROM_ALL ${PORT}/tests/test_savecrypt.c)
 target_link_libraries(test_savecrypt PRIVATE psp2i_savecrypt)
 add_test(NAME test_savecrypt COMMAND test_savecrypt ${PORT}/tests/data/savecrypt_param.sfo)
+add_executable(test_charswap EXCLUDE_FROM_ALL ${PORT}/tests/test_charswap.c ${PORT}/host/charswap.c)   # F2 > CHARACTER
+target_include_directories(test_charswap PRIVATE ${PORT}/host)
+target_link_libraries(test_charswap PRIVATE psprecomp)
+add_test(NAME test_charswap COMMAND test_charswap)
 if(TARGET psp2i_atrac)
     add_dependencies(psp2i psp2i_atrac)
     add_custom_command(TARGET psp2i POST_BUILD COMMAND ${CMAKE_COMMAND} -E
@@ -46,7 +56,7 @@ if(TARGET psp2i_atrac)
 endif()
 
 if(ENABLE_MMO_NET)   # psprecomp's option: the MMO client start-up
-    target_sources(psp2i PRIVATE ${PORT}/host/mmo_client.c ${PORT}/host/party_ui.c ${PORT}/host/lobby.c ${PORT}/host/infra.c)
+    target_sources(psp2i PRIVATE ${PORT}/host/mmo_client.c ${PORT}/host/party_ui.c ${PORT}/host/charswap.c ${PORT}/host/lobby.c ${PORT}/host/infra.c)
 endif()
 
 option(PSP2I_LIBAV "Decode movie video with FFmpeg" ON)

@@ -1,6 +1,7 @@
 # PSP2i for Android, native part (built by app/build.gradle).
 #
-#   libmain.so         the psprecomp runtime, the SDL3 host (host/sdl_main.c),
+#   libmain.so         the psprecomp runtime (with online play: the MMO client,
+#                      the F2 menu), the SDL3 host (host/sdl_main.c),
 #                      the GE on OpenGL ES 3.0 (host/gl_ge.c) and the game's
 #                      generated code (build/gen) when it is there
 #   libSDL3.so         SDL3, from SDL_DIR (the source app/build.gradle fetches)
@@ -23,7 +24,9 @@ if(NOT SDL_DIR OR NOT EXISTS ${SDL_DIR}/CMakeLists.txt)
 endif()
 
 add_subdirectory(${SDL_DIR} SDL EXCLUDE_FROM_ALL)
-set(ENABLE_MMO_NET OFF CACHE BOOL "Android: the online client is not wired into this host yet" FORCE)
+# Online play, as on the desktop: the MMO client through our server (client_config.toml in the
+# app's data folder; without one, a server on the local network is looked for). ENet is fetched.
+set(ENABLE_MMO_NET ON CACHE BOOL "Build the online client (always on)" FORCE)
 add_subdirectory(${PSPRECOMP_DIR} psprecomp EXCLUDE_FROM_ALL)
 add_subdirectory(${PORT}/atrac_dll atrac_dll)
 
@@ -65,6 +68,11 @@ add_library(main SHARED
     ${PORT}/host/texpack.c
     ${PORT}/host/postfx.c
     ${PORT}/host/h264_mediacodec.c
+    ${PORT}/host/mmo_client.c
+    ${PORT}/host/party_ui.c
+    ${PORT}/host/charswap.c
+    ${PORT}/host/lobby.c
+    ${PORT}/host/infra.c
     ${GAME_SOURCES})
 target_include_directories(main PRIVATE ${PORT}/host ${PSP2I_GEN_DIR} ${CMAKE_BINARY_DIR}/gen_split
     ${PORT}/third_party/xxhash ${PORT}/third_party/stb)

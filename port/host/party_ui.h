@@ -1,12 +1,21 @@
-/* The party finder (MMO builds): a panel over the game that lists the parties
- * being hosted on the server (psp_net_mmo_parties) and takes the player into
- * one, or starts their own, by pressing the Matching Counter's buttons for
- * them.
+/* The F2 menu (MMO builds), over the game; F2 (keyboard) or L3 (controller)
+ * opens and closes it any time. Two columns, Left / Right between them:
+ *
+ *   - PARTY (left): the party finder, the lobby's rooms and weapons in the
+ *     lobby (below). Rows that don't apply where you are are greyed, and say
+ *     why when chosen.
+ *   - CHARACTER (right): wear the look of one of the game's partner
+ *     characters, or your own again (charswap.c).
+ *
+ * D-pad or stick to move (Up / Down repeat when held), Circle to choose,
+ * Cross to close (X and Z on the keyboard).
+ *
+ * The party finder lists the parties being hosted on the server
+ * (psp_net_mmo_parties) and takes the player into one, or starts their own,
+ * by pressing the Matching Counter's buttons for them.
  *
  *   - Opens by itself when the game enters the Matching Counter (Multi Mode)
- *     and the player is in no party; F2 (keyboard) or L3 (controller) opens
- *     and closes it any time. In the panel: D-pad or stick to move, Circle to
- *     choose, Cross to close (X and Z on the keyboard).
+ *     and the player is in no party; from the F2 menu otherwise.
  *   - JOIN: the game's Join Party search is steered to the chosen leader
  *     (psp_net_mmo_set_join_target), then Join Party, the party, and the
  *     confirmation are pressed, each once the network shows the game is ready
@@ -14,11 +23,12 @@
  *   - START A PARTY: Form Party is pressed; Begin Party Play stays the
  *     leader's choice.
  *   - Anything that does not happen in time hands control back, with a notice.
- *   - In the Multi Mode lobby, F2 / L3 opens the lobby menu instead: the party
- *     leader warps the whole party to one of the lobby's rooms (sent through
- *     the server: psp_net_mmo_party_warp), and switches "weapons in the lobby"
- *     on or off for the whole party (sent with the warps; a switch re-enters
- *     the room so it shows at once). Members see both, greyed.
+ *
+ * In the Multi Mode lobby, the party leader warps the whole party to one of
+ * the lobby's rooms (sent through the server: psp_net_mmo_party_warp), and
+ * switches "weapons in the lobby" on or off for the whole party (sent with
+ * the warps; a switch re-enters the room so it shows at once). Members see
+ * both, greyed.
  * While the panel is open, the game gets no input. */
 #ifndef PSP2I_PARTY_UI_H
 #define PSP2I_PARTY_UI_H
@@ -39,6 +49,11 @@ int party_ui_update(uint32_t held, uint32_t latched, uint32_t *inject);
 int party_ui_draw(menu_image *img, int *x, int *y, int *w, int *h);
 
 int party_ui_open(void);
+
+/* A tap at (x, y) in the 480x272 picture (touch screens): on a row, it is
+ * selected, and chosen if it already was. Returns 1 if the tap was on the
+ * panel (it is the panel's, not the game's), 0 otherwise. */
+int party_ui_touch(int x, int y);
 
 
 

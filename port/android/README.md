@@ -80,9 +80,24 @@ touch=off     hide the touch controls for good (a controller is used)
   - The right stick turns the camera.
   - The touch controls hide while a controller is in use and come back when you touch the screen.
 
+## Online play
+
+The app is built with online play, as the desktop builds are: Multi Mode and Internet Multi Mode through a PSP2i server (`psp2i_server`, see the main README). Story Mode needs no server.
+
+- **Which server:** with no settings, the app looks for a server on the local network (the phone on the same Wi-Fi as a server started with `--lan`). For any other server, put a `client_config.toml` in the app's data folder (the folder chosen at the first start, where `psp2i.ini` lives), for example:
+
+  ```
+  server_ip   = "192.168.1.20"
+  server_port = 29001
+  player_name = "Ann"
+  ```
+
+  All the settings are in [docs/client_config.example.toml](../../docs/client_config.example.toml).
+- **The F2 menu:** the cyan button at the top, right of MENU (or L3 on a controller). Party finder, lobby warps and the character list. Tap a row to select it, tap it again to choose it; the touch D-pad or stick also moves, Circle chooses, Cross closes.
+- **Switching apps:** Android pauses the game while it is in the background, so a long switch away may drop you from the server.
+
 ## Not here yet
 
-- **Online play:** RPCN and the SEGA server are on the Windows build only.
 - **The settings menu:** use `psp2i.ini` for now.
 - **Movie video:** movies play their sound over a black picture.
 - **Save encryption:** saves are written unencrypted, as on Windows. They move between this and the Windows build, but not to or from a PSP.

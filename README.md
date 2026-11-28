@@ -14,13 +14,14 @@ A fork of the recompilation project for **Phantasy Star Portable 2 Infinity (PSP
 
 **This fork (PSP2I_Recomp_Online)** brings back the game's online play as it was on the original PSN and SEGA servers, as a standing reproduction for small groups of players. You run a small server of your own, on your LAN or for friends, and the game connects to it as it once did to the official services: the online Terms of Use and Notices, the matching server, Internet Multi Mode's lobby rooms, and Multi Mode parties. Player limits are the original servers': 12 players per lobby room and 4 per party, with up to 12 players on a server. A few extras sit on top: warping your party around the lobby, showing your weapons in the lobby, and a simple web admin panel.
 
-The game builds with online play by default; Story Mode plays as before. To build without it, see [Quick Start](#quick-start).
+The game always builds with online play; Story Mode plays as before.
 
 Online features at a glance:
 
 - **Party finder**: pick a party being hosted on the server, or start your own, from the Matching Counter.
 - **Lobby warps**: the party leader takes the whole party to any of ten rooms of the Multi Mode lobby (Bridge, Cafe, Battle Shop, Style Shop, Little Wing and more).
 - **Weapons in the lobby**: the party leader can let everyone draw their weapons in the lobby to show off their gear, or keep the original game's look.
+- **Character looks**: wear the look of any of the game's 87 partner characters (Emilia, Ethan, Nagisa and the other story characters, and the GH-series presets), and switch back to your own at any time. In the F2 menu, anywhere in the game.
 - **Player limits as on the original servers**: Internet Multi Mode lobby rooms hold 12 players and Multi Mode parties hold 4, 1:1 with the original game servers. The server runs several lobby rooms side by side to reach its total.
 - **Your own server**: stands in for the original PSN and SEGA services for up to 12 players, with server-side loot, SQLite persistence and a simple web admin panel.
 
@@ -40,7 +41,7 @@ You need your own copy of the game: the disc image (`.iso`) and a decrypted `EBO
 | Windows | Visual Studio and CMake | `build_port.bat` | `build\PSP2i_Windows\` |
 | Android | see [port/android](port/android/README.md) | `build_android.bat` | `build\dist\psp2i-android.apk` |
 
-For a game without online play: `./build_macos.sh --offline`, `port/linux/appimage/build_appimage.sh --offline`, or `build_port.bat offline` on Windows.
+Every build, Android included, has online play; there is no offline build. Story Mode plays as before without a server.
 
 **3. Put your game files in the build folder and play.**
 
@@ -112,7 +113,9 @@ The keyboard uses PPSSPP's default layout. Click the game window first. A gamepa
 | Start | Space | Start / Menu |
 | Select | V (or Enter) | Back / View |
 | Settings menu | F1 | R3 or Guide |
-| Party finder / lobby menu | F2 | L3 (left stick click) |
+| F2 menu (party, lobby, character) | F2 | L3 (left stick click) |
+
+On Android, the cyan touch button at the top of the screen (right of MENU) opens the F2 menu.
 
 This is the Japanese release, so Circle confirms and Cross cancels. On Windows the keys can be rebound in the settings menu (CONTROLS > KEYBOARD/MOUSE).
 
@@ -206,21 +209,36 @@ Config files:
   - `lan_discovery` (true);
   - `discovery_port` (29000);
   - `player_name`;
-  - `party_finder` (true): open the party finder at the Matching Counter.
+  - `party_finder` (true): open the party finder by itself at the Matching Counter (the F2 menu opens it any time).
 - **`terms_of_use.txt`** (with your game files): plain UTF-8 text shown in the game's Terms of Use window when a player connects in Internet Multi Mode. Edit it to set your server's rules; the window wraps long lines on its own. Without the file a one-line placeholder is shown.
 - **`notices.txt`** (with your game files): the same, for the Notices window that follows the Terms of Use (server news).
 
-**Party finder.** In Multi Mode, the Matching Counter opens a panel listing the parties being hosted on the server (leader, members, free slots), plus START A PARTY and CHOOSE MYSELF. Pick a party and the client joins it for you: it presses Join Party, shows the game only that leader's party, and confirms. START A PARTY presses Form Party; Begin Party Play stays with the leader. F2 (keyboard) or L3 (controller) opens and closes the panel. In the panel:
+**The F2 menu.** F2 (keyboard), L3 (controller) or the cyan touch button (Android) opens and closes it anywhere in the game, Story Mode included. It has two columns:
 
-| | Keyboard | Controller |
-| --- | --- | --- |
-| Move | Arrow keys or I / K | D-pad or left stick |
-| Choose | X (Circle) | B / Circle (east) |
-| Close | Z (Cross) | A / Cross (south) |
+- **PARTY** (left): Party finder, the lobby's rooms, Lobby weapons, Close.
+- **CHARACTER** (right): My own character, then the 87 partner characters with their race and sex.
 
-If a step doesn't happen in time, the finder hands control back with a notice.
+Rows that don't apply where you are, such as the rooms outside the Multi Mode lobby, are greyed out, and say why if you choose them. When the menu opens, the cursor starts where it's most useful: on the rooms in the lobby, on the party finder at the Matching Counter, and on the character list elsewhere.
 
-**Lobby menu.** In the Multi Mode lobby, F2 / L3 opens the lobby menu instead (same keys as the party finder):
+| | Keyboard | Controller | Touch (Android) |
+| --- | --- | --- | --- |
+| Move | Arrow keys or I / K (hold to repeat) | D-pad or left stick | the touch D-pad or stick, or tap a row |
+| Switch column | Left / Right | Left / Right | tap the other column |
+| Choose | X (Circle) | B / Circle (east) | tap the selected row again |
+| Close | Z (Cross) | A / Cross (south) | the F2 button |
+
+While the menu is open the game gets no input.
+
+**Character looks.** Pick a character in the CHARACTER column to wear their look: their race, body and outfit. Your class, levels, weapons, colours and everything else stay yours. The game doesn't redraw you straight away: it builds your model again the next time you **change your armour** or **enter another area** (another lobby room, a mission, a new zone). A notice says so after each choice. The current look is marked `*` in the list.
+
+- **My own character** puts your own look back, again from your next armour change or area.
+- Your own look is saved to `character_backup.txt` in the game folder before your first swap. The game saves the look you wear with your character, so if it saves while you wear someone else's, you keep that look after a restart, and My own character still brings yours back. Keep that file until you have switched back.
+- Pick a character of another race and you play as that race's body. Race may also change your stats; switch back if you'd rather not.
+- The partner characters are part of the game's data once it's loaded (the lobby, missions). On the title screen the list is empty and says so.
+
+**Party finder.** In Multi Mode, the Matching Counter opens a panel listing the parties being hosted on the server (leader, members, free slots), plus START A PARTY and CHOOSE MYSELF. It also opens from the F2 menu's Party finder row, and Cross takes you back to the menu. Pick a party and the client joins it for you: it presses Join Party, shows the game only that leader's party, and confirms. START A PARTY presses Form Party; Begin Party Play stays with the leader. If a step doesn't happen in time, the finder hands control back with a notice.
+
+**Lobby warps and options.** In the Multi Mode lobby, the F2 menu's PARTY column has:
 
 - **Warp the party to** one of the lobby's rooms. Only the party leader can choose; the server passes the choice to every member and the whole party moves together.
 

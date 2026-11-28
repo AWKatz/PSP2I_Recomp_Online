@@ -22,8 +22,6 @@ An AppImage is a single file that runs on most distributions with nothing to ins
    port/linux/appimage/build_appimage.sh             # the game with online play, and the server:
                                                      #   build/PSP2i_Linux/PSP2i-x86_64.AppImage
                                                      #   build/PSP2i_Linux/server/psp2i_server-x86_64.AppImage
-   port/linux/appimage/build_appimage.sh --offline   # the game without online play:
-                                                     #   build/PSP2i_Linux/PSP2i-offline-x86_64.AppImage
    ```
 
    The script generates `build/gen` from `EBOOT.BIN` if needed. It builds SDL3 3.4.20 and a minimal FFmpeg 9.0.2 (movie playback only) from source, then the game, and packs each program with `linuxdeploy`.
@@ -54,4 +52,4 @@ cmake --build build/linux --target psp2i
 PSP2I_DATA=$PWD build/linux/psp2i
 ```
 
-This needs SDL3 and FFmpeg development packages. If you don't have FFmpeg, add `-DPSP2I_LIBAV=OFF`; the movies will then be black. Online play is on by default; add `-DBUILD_DEDICATED_SERVER=ON` for the server too, or `-DENABLE_MMO_NET=OFF` for a game without online play.
+This needs SDL3 and FFmpeg development packages. If you don't have FFmpeg, add `-DPSP2I_LIBAV=OFF`; the movies will then be black. Online play is always built in; add `-DBUILD_DEDICATED_SERVER=ON` for the server too.

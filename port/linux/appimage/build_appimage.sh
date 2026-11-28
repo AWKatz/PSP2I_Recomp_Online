@@ -2,10 +2,10 @@
 # Build PSP2i Recompiled as AppImages (Linux x86_64 / arm64, the Steam Deck included).
 #
 #   port/linux/appimage/build_appimage.sh             the game with online play, and the server
-#   port/linux/appimage/build_appimage.sh --offline   the game without online play
+#                                                     (there is no offline build)
 #
-# Writes the game folder build/PSP2i_Linux/: PSP2i-<arch>.AppImage (with --offline:
-# PSP2i-offline-<arch>.AppImage) and server/psp2i_server-<arch>.AppImage. Put your
+# Writes the game folder build/PSP2i_Linux/: PSP2i-<arch>.AppImage and
+# server/psp2i_server-<arch>.AppImage. Put your
 # EBOOT.BIN, game .iso and NPJH50332/ save folder in the root of build/PSP2i_Linux.
 #
 # Needs cmake, ninja, a C/C++ compiler, nasm (FFmpeg), curl, and the X11/Wayland/ALSA/
@@ -17,8 +17,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 ROOT=$PWD
-MMO=ON
-[[ "${1:-}" == --offline ]] && MMO=OFF
 ARCH=$(uname -m)
 W=$ROOT/build/appimage
 DEPS=$W/deps
@@ -58,11 +56,11 @@ if [[ ! -f $DEPS/lib/libavcodec.so ]]; then
         --enable-decoder=h264 && make -j"$(nproc)" && make install)
 fi
 
-# 3. The game (and, unless --offline, the server).
-B=$W/build-$([[ $MMO == ON ]] && echo online || echo offline)
+# 3. The game and the server.
+B=$W/build-online
 PKG_CONFIG_PATH=$DEPS/lib/pkgconfig cmake -S port/linux -B "$B" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_PREFIX_PATH="$DEPS" -DENABLE_MMO_NET=$MMO -DBUILD_DEDICATED_SERVER=$MMO
-cmake --build "$B" --target psp2i $([[ $MMO == ON ]] && echo psp2i_server)
+    -DCMAKE_PREFIX_PATH="$DEPS" -DENABLE_MMO_NET=ON -DBUILD_DEDICATED_SERVER=ON
+cmake --build "$B" --target psp2i psp2i_server
 
 # 4. linuxdeploy packs each program with the libraries it needs.
 LD=$W/linuxdeploy-$ARCH.AppImage
@@ -87,12 +85,8 @@ pack() {  # name binary apprun desktop output [extra setup]
 game_files() { install -m755 "$B/libpsp2i_atrac.so" "$1/usr/bin/"; }   # ATRAC music, loaded next to the game
 server_files() { mkdir -p "$1/usr/share/psp2i_server/config"; cp server/config/* "$1/usr/share/psp2i_server/config/"; }
 
-if [[ $MMO == ON ]]; then
-    pack psp2i "$B/psp2i" AppRun-game psp2i.desktop "PSP2i-$ARCH.AppImage" game_files
-    pack psp2i_server "$B/server/psp2i_server" AppRun-server psp2i_server.desktop "server/psp2i_server-$ARCH.AppImage" server_files
-else
-    pack psp2i-offline "$B/psp2i" AppRun-game psp2i.desktop "PSP2i-offline-$ARCH.AppImage" game_files
-fi
+pack psp2i "$B/psp2i" AppRun-game psp2i.desktop "PSP2i-$ARCH.AppImage" game_files
+pack psp2i_server "$B/server/psp2i_server" AppRun-server psp2i_server.desktop "server/psp2i_server-$ARCH.AppImage" server_files
 # EBOOT.BIN, if it is not there yet.
 [[ -f EBOOT.BIN && ! -f $DIST/EBOOT.BIN ]] && cp EBOOT.BIN "$DIST/"
 echo "Game folder: $DIST"

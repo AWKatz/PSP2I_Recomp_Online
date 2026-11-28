@@ -34,7 +34,9 @@
  *               frame-rate audit, F6 the press audit, rateaudit.c)
  *               (framerate.c); changeable at run time in the settings menu
  *   --menu-key F1..F9|F11  the keyboard key that opens/closes the settings
- *               menu (default F1; the controller's Guide or R3 also do)
+ *               menu (default F1; the controller's Guide or R3 also do).
+ *               Online builds: F2 (or L3) opens the F2 menu, party_ui.c
+ *               (party finder, lobby warps, character); not with --menu-key F2
  *   --show-fps / --hide-fps  the measured-FPS counter at start (default shown)
  *   --rs-speed 1.0..2.0  right-stick camera sensitivity at start (default
  *               1.0; the settings menu changes it in 0.25 steps)
@@ -395,6 +397,15 @@ static fps_meter  g_fpsm;
 static uint32_t   g_host_held, g_host_latched;  /* MI_* from keys the game never sees */
 static uint32_t   g_keys_latched;          /* PSP bits of keys pressed since the last vblank */
 static char       g_menu_key_name[8] = "F1";
+#ifdef PSPRECOMP_MMO_NET
+#include "party_ui.h"
+/* The F2 menu (party_ui.c): F2 or L3 opens it; while open the game gets no
+ * input; its party-finder automation presses buttons (inject). */
+static uint32_t g_party_latched;           /* MI_TOGGLE from F2 / L3 since the last vblank */
+static int      g_party_grab;              /* the panel is open: the game gets nothing */
+static uint32_t g_party_hide;              /* buttons still held from the panel, kept from the game */
+static uint32_t g_party_inject;            /* buttons the automation presses this vblank */
+#endif
 
 static void draw_overlay(void) {
     menu_image img = { g_rgba, SCREEN_W, SCREEN_H };
@@ -406,6 +417,9 @@ static void draw_overlay(void) {
     }
 #endif
     menu_draw(&g_menu, &img, framerate_game_fps(), g_menu_key_name);
+#ifdef PSPRECOMP_MMO_NET
+    if (!g_menu.open) { int bx, by, bw, bh; party_ui_draw(&img, &bx, &by, &bw, &bh); }
+#endif
 }
 
 /* What the window shows: the latest game frame with the overlay on top. */
@@ -574,6 +588,9 @@ static void game_msg(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         }
 #endif
         if (key_capture(wp, first)) return;
+#ifdef PSPRECOMP_MMO_NET
+        if (wp == VK_F2 && g_menu_vk != VK_F2) { if (first) g_party_latched |= MI_TOGGLE; return; }   /* the F2 menu */
+#endif
         const uint32_t hk = host_key(wp);
         if (hk) { g_host_held |= hk; if (first) g_host_latched |= hk; return; }
         if (key_stick(wp)) { g_kstick |= key_stick(wp); ctrl_commit(); return; }
@@ -912,6 +929,13 @@ static int window_show_hd(void) {
         menu_box(&g_menu, SCREEN_W, SCREEN_H, &bx, &by, &bw, &bh);
         hd_overlay_box(px, bx, by, bw, bh, x, y, w, h, cw, ch);
     }
+#ifdef PSPRECOMP_MMO_NET
+    else {
+        for (int i = 0; i < SCREEN_W * SCREEN_H; i++) px[i] = 0xFF000000u;
+        int bx, by, bw, bh;
+        if (party_ui_draw(&img, &bx, &by, &bw, &bh)) hd_overlay_box(px, bx, by, bw, bh, x, y, w, h, cw, ch);
+    }
+#endif
     gl_platform_swap();
     return 0;
 }
@@ -1175,6 +1199,11 @@ static void ctrl_commit(void) {
     /* The settings menu takes all input while open (menu_filter_game). */
     bits = menu_filter_game(&g_menu, bits & ~PRESS_MENU);
     if (g_menu.open) ax = ay = 128;
+#ifdef PSPRECOMP_MMO_NET
+    if (g_party_grab) { bits = 0; ax = ay = 128; }
+    else bits &= ~g_party_hide;
+    bits |= g_party_inject;
+#endif
     if (!g_rep_on) rec_pad(bits, ax, ay);
     psp_ctrl_set(bits, ax, ay);
 }
@@ -1333,6 +1362,32 @@ static void audio_apply(void) {
     audio_set_attenuation_db(menu_att_db(g_att_saved));
 }
 
+#ifdef PSPRECOMP_MMO_NET
+/* Once per vblank, after the settings menu: the F2 menu (party_ui.c). held:
+ * MI_* without the settings hotkey; raw: the PSP buttons held. Nothing reaches
+ * it while the settings menu is open. */
+static void party_step(uint32_t held, uint32_t raw) {
+    static uint32_t prev_l3;
+    static int grabbed;
+    const uint32_t l3 = input_sdl_host_buttons() & INPUT_HOST_LSTICK;   /* L3 opens and closes it, as F2 */
+    if (l3 && !prev_l3) g_party_latched |= MI_TOGGLE;
+    prev_l3 = l3;
+    const int was_open = party_ui_open();
+    uint32_t inject = 0;
+    const int grab = party_ui_update(g_menu.open ? 0 : held, g_menu.open ? 0 : g_party_latched, &inject);
+    g_party_latched = 0;
+    /* open, or closed by this very press: what is held now is the panel's, not the game's */
+    uint32_t hide = g_party_hide;
+    if (grab || was_open || grabbed) hide = raw;
+    else hide &= raw;
+    grabbed = grab;
+    if (grab != g_party_grab || hide != g_party_hide || inject != g_party_inject) {
+        g_party_grab = grab; g_party_hide = hide; g_party_inject = inject;
+        ctrl_commit();
+    }
+}
+#endif
+
 /* Once per vblank: the menu reads the raw input (the game's is filtered). */
 static void menu_step(void) {
     uint32_t psp = g_script_bits | g_pad_bits, latched = g_host_latched;
@@ -1356,8 +1411,10 @@ static void menu_step(void) {
     if (g_script_stick >= 0) { ax = g_stick[g_script_stick].x; ay = g_stick[g_script_stick].y; }
     uint32_t held = menu_inputs(psp, ax, ay) | g_host_held;
     if (input_sdl_host_buttons() & (INPUT_HOST_GUIDE | INPUT_HOST_RSTICK)) held |= MI_TOGGLE;
-
     const int fx = menu_update(&g_menu, held, latched);
+#ifdef PSPRECOMP_MMO_NET
+    party_step(held & ~MI_TOGGLE, psp);
+#endif
     if (fx & MFX_FPS_CHANGED) {
         framerate_set(g_menu.fps);
         rec_fps(g_menu.fps);
@@ -1514,6 +1571,9 @@ static void update_camera_stick(uint64_t vb) {
         if (vb >= g_rstick[i].at && vb < g_rstick[i].at + g_rstick[i].len) { rx = g_rstick[i].x; ry = g_rstick[i].y; }
     if (g_rep_on) { rx = g_rep_rx; ry = g_rep_ry; }
     if (g_menu.open || !g_menu.rs_on) rx = ry = 128;      /* the menu's RIGHT STICK off: no camera */
+#ifdef PSPRECOMP_MMO_NET
+    if (g_party_grab) rx = ry = 128;
+#endif
     if (!g_rep_on) rec_cam(rx, ry);
     camera_set_stick(rx, ry);
 }

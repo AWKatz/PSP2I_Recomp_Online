@@ -209,7 +209,8 @@ typedef struct {
     float    r, g, b;
 } control;
 
-enum { C_STICK, C_UP, C_DOWN, C_LEFT, C_RIGHT, C_TRI, C_CIR, C_CRO, C_SQU, C_L, C_R, C_SELECT, C_START, C_MENU, C_COUNT };
+/* C_MENU and after: no PSP button. C_PARTY: the F2 menu (MMO builds) */
+enum { C_STICK, C_UP, C_DOWN, C_LEFT, C_RIGHT, C_TRI, C_CIR, C_CRO, C_SQU, C_L, C_R, C_SELECT, C_START, C_MENU, C_PARTY, C_COUNT };
 static control g_ctl[C_COUNT];
 static int g_lay_w, g_lay_h;
 
@@ -235,6 +236,7 @@ static void layout(int w, int h) {
     SET(C_SELECT, SH_RECT, P_SELECT, (float)w * 0.5f - 0.1f * u, (float)h - 0.06f * u, 0.065f * u, 0.028f * u, 0.9f, 0.9f, 0.9f);
     SET(C_START,  SH_RECT, P_START,  (float)w * 0.5f + 0.1f * u, (float)h - 0.06f * u, 0.065f * u, 0.028f * u, 0.9f, 0.9f, 0.9f);
     SET(C_MENU,   SH_RECT, 0,        (float)w * 0.5f, 0.05f * u, 0.07f * u, 0.03f * u, 0.9f, 0.9f, 0.9f);   /* the settings menu */
+    SET(C_PARTY,  SH_RECT, 0,        (float)w * 0.5f + 0.17f * u, 0.05f * u, 0.05f * u, 0.03f * u, 0.4f, 0.85f, 1.0f);   /* the F2 menu */
     #undef SET
 }
 
@@ -286,6 +288,17 @@ static void touch_event(const SDL_TouchFingerEvent *e, int down, int up) {
             g_finger[i].menu = 1;
             g_menu_latched |= MI_TOGGLE;
         }
+#ifdef PSPRECOMP_MMO_NET
+        else if (party_ui_open() && g_vw > 0 && g_vh > 0 &&                     /* a tap on the F2 menu's panel */
+                 party_ui_touch((int)((x - (float)g_vx) * SCREEN_W / (float)g_vw), (int)((y - (float)g_vy) * SCREEN_H / (float)g_vh))) {
+            g_finger[i].stick = 0;
+            g_finger[i].menu = 1;
+        } else if (g_touch_on && g_touch_shown && hit(&g_ctl[C_PARTY], x, y)) {
+            g_finger[i].stick = 0;
+            g_finger[i].menu = 1;
+            g_party_latched |= MI_TOGGLE;
+        }
+#endif
         g_touch_shown = g_touch_on;
     }
     g_finger[i].x = x;
@@ -511,6 +524,11 @@ static void draw_controls(int cw, int ch) {
     for (int i = 0; i < C_COUNT; i++) {
         const control *c = &g_ctl[i];
         if (i == C_MENU && g_menu.open) continue;
+#ifdef PSPRECOMP_MMO_NET
+        if (i == C_PARTY && g_menu.open) continue;
+#else
+        if (i == C_PARTY) continue;                      /* no F2 menu in this build */
+#endif
         const float a = (c->bit && (g_touch_bits & c->bit)) ? pressed : base;
         if (pc) draw_shape(cw, ch, c->shape, c->cx, c->cy, c->rx, c->ry, PRESET[pc][0], PRESET[pc][1], PRESET[pc][2], a);
         else    draw_shape(cw, ch, c->shape, c->cx, c->cy, c->rx, c->ry, c->r, c->g, c->b, a);
@@ -823,7 +841,9 @@ static void on_vblank(void) {
         static int grabbed;
         uint32_t inject = 0;
         const int was_open = party_ui_open();
-        const int grab = party_ui_update(g_menu.open ? 0 : held & ~MI_TOGGLE, g_menu.open ? 0 : g_party_latched, &inject);
+        /* the touch D-pad, stick and buttons move in the panel too, as a controller's do */
+        const uint32_t party_held = (held | menu_inputs_from_psp(g_touch_bits, ax, ay)) & ~MI_TOGGLE;
+        const int grab = party_ui_update(g_menu.open ? 0 : party_held, g_menu.open ? 0 : g_party_latched, &inject);
         g_party_latched = 0;
         /* open, or closed by this very press: what is held now is the panel's, not the game's */
         if (grab || was_open || grabbed) hide = pad | g_touch_bits;
