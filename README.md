@@ -21,7 +21,7 @@ Online features at a glance:
 - **Party finder**: pick a party being hosted on the server, or start your own, from the Matching Counter.
 - **Lobby warps**: the party leader takes the whole party to any of ten rooms of the Multi Mode lobby (Bridge, Cafe, Battle Shop, Style Shop, Little Wing and more).
 - **Weapons in the lobby**: the party leader can let everyone draw their weapons in the lobby to show off their gear, or keep the original game's look.
-- **Character looks**: wear the look of any of the game's 87 partner characters (Emilia, Ethan, Nagisa and the other story characters, and the GH-series presets), and switch back to your own at any time. In the F2 menu, anywhere in the game.
+- **Character looks**: wear the look of any of the game's 87 partner characters (Emilia, Ethan, Nagisa and the other story characters, and the GH-series presets), and switch back to your own at any time. In the menu's Character tab, anywhere in the game.
 - **Player limits as on the original servers**: Internet Multi Mode lobby rooms hold 12 players and Multi Mode parties hold 4, 1:1 with the original game servers. The server runs several lobby rooms side by side to reach its total.
 - **Your own server**: stands in for the original PSN and SEGA services for up to 12 players, with server-side loot, SQLite persistence and a simple web admin panel.
 
@@ -132,10 +132,11 @@ The keyboard uses PPSSPP's default layout. Click the game window first. A gamepa
 | L / R | Q / W | Shoulders or triggers |
 | Start | Space | Start / Menu |
 | Select | V (or Enter) | Back / View |
-| Settings menu | F1 | R3 or Guide |
-| F2 menu (party, lobby, character) | F2 | L3 (left stick click) |
+| Menu, on its Settings tab | F1 | R3 or Guide |
+| Menu, on its Party tab | F2 | L3 (left stick click) |
+| Menu: next / previous tab | W / Q (R / L) | R / L |
 
-On Android, the cyan touch button at the top of the screen (right of MENU) opens the F2 menu.
+On Android, MENU at the top of the screen opens the menu on its Settings tab, and the cyan button to its right on its Party tab.
 
 This is the Japanese release, so Circle confirms and Cross cancels. On Windows the keys can be rebound in the settings menu (CONTROLS > KEYBOARD/MOUSE).
 
@@ -231,38 +232,40 @@ Config files:
   - `lan_discovery` (true);
   - `discovery_port` (29000);
   - `player_name`;
-  - `party_finder` (true): open the party finder by itself at the Matching Counter (the F2 menu opens it any time).
+  - `party_finder` (true): open the party finder by itself at the Matching Counter (the menu's Party tab opens it any time).
 - **`terms_of_use.txt`** (with your game files): plain UTF-8 text shown in the game's Terms of Use window when a player connects in Internet Multi Mode. Edit it to set your server's rules; the window wraps long lines on its own. Without the file a one-line placeholder is shown.
 - **`notices.txt`** (with your game files): the same, for the Notices window that follows the Terms of Use (server news).
 
-**The F2 menu.** F2 (keyboard), L3 (controller) or the cyan touch button (Android) opens and closes it anywhere in the game, Story Mode included. It has two columns:
+**The menu.** One window with three tabs, opened anywhere in the game, Story Mode included:
 
-- **PARTY** (left): Party finder, the lobby's rooms, Lobby weapons, Close.
-- **CHARACTER** (right): My own character, then the 87 partner characters with their race and sex.
+- **SETTINGS:** graphics, sound, controls and the rest (F1, R3 or Guide; MENU on Android).
+- **PARTY:** the party finder, warping the party between the lobby's rooms, and lobby weapons (F2, L3; the cyan button on Android).
+- **CHARACTER:** My own character, then the 87 partner characters with their race and sex.
 
-Rows that don't apply where you are, such as the rooms outside the Multi Mode lobby, are greyed out, and say why if you choose them. When the menu opens, the cursor starts where it's most useful: on the rooms in the lobby, on the party finder at the Matching Counter, and on the character list elsewhere.
+L and R (Q and W on the keyboard) move between the tabs, wrapping round; on a touch screen, tap a tab. The key that opened the menu closes it, as does Cross. Rows that don't apply where you are, such as the rooms outside the Multi Mode lobby, are greyed out, and the selected one says why. On the Party tab the cursor starts where it's most useful: on the rooms in the Multi Mode lobby, on lobby weapons in Internet Multi Mode's lobby, else on the party finder.
 
 | | Keyboard | Controller | Touch (Android) |
 | --- | --- | --- | --- |
 | Move | Arrow keys or I / K (hold to repeat) | D-pad or left stick | the touch D-pad or stick, or tap a row |
-| Switch column | Left / Right | Left / Right | tap the other column |
+| Tab | Q / W (L / R) | L / R | tap the tab |
+| Page (Character tab) | Left / Right | Left / Right | the touch D-pad |
 | Choose | X (Circle) | B / Circle (east) | tap the selected row again |
-| Close | Z (Cross) | A / Cross (south) | the F2 button |
+| Close | Z (Cross), or the key that opened it | A / Cross (south) | the button that opened it |
 
 While the menu is open the game gets no input.
 
 <img width="1072" height="684" alt="Screenshot 2026-11-27 at 10 00 34 PM" src="https://github.com/user-attachments/assets/ef0f893c-40b0-4b7a-9059-aff177592bd1" />
 
-**Character looks.** Pick a character in the CHARACTER column to wear their look: their race, body and outfit. Your class, levels, weapons, colours and everything else stay yours. The game builds your model when an area loads, so the look shows then: **in a lobby, the menu enters the area again for you** at once. In a mission, it shows from the next area you enter (the menu won't reload a mission, which would start it over). Changing armour doesn't redraw you. A notice says which after each choice. The current look is marked `*` in the list.
+**Character looks.** Pick a character in the CHARACTER tab to wear their look: their race, body and outfit. Your class, levels, weapons, colours and everything else stay yours. The game builds your model when an area loads, so the look shows then: **in a lobby, the menu enters the area again for you** at once. In a mission, it shows from the next area you enter (the menu won't reload a mission, which would start it over). Changing armour doesn't redraw you. A notice says which after each choice. The current look is marked `*` in the list.
 
 - **My own character** puts your own look back, the same way.
 - Your own look is saved to `character_backup.txt` in the game folder before your first swap. The game saves the look you wear with your character, so if it saves while you wear someone else's, you keep that look after a restart, and My own character still brings yours back. Keep that file until you have switched back.
 - Pick a character of another race and you play as that race's body. Race may also change your stats; switch back if you'd rather not.
 - The partner characters are part of the game's data once it's loaded (the lobby, missions). On the title screen the list is empty and says so.
 
-**Party finder.** In Multi Mode, the Matching Counter opens a panel listing the parties being hosted on the server (leader, members, free slots), plus START A PARTY and CHOOSE MYSELF. It also opens from the F2 menu's Party finder row, and Cross takes you back to the menu. Pick a party and the client joins it for you: it presses Join Party, shows the game only that leader's party, and confirms. START A PARTY presses Form Party; Begin Party Play stays with the leader. If a step doesn't happen in time, the finder hands control back with a notice.
+**Party finder.** In Multi Mode, the Matching Counter opens a panel listing the parties being hosted on the server (leader, members, free slots), plus START A PARTY and CHOOSE MYSELF. It also opens from the Party tab's Party finder row, and Cross takes you back to the tab. Pick a party and the client joins it for you: it presses Join Party, shows the game only that leader's party, and confirms. START A PARTY presses Form Party; Begin Party Play stays with the leader. If a step doesn't happen in time, the finder hands control back with a notice.
 
-**Lobby warps and options.** In the Multi Mode lobby, the F2 menu's PARTY column has:
+**Lobby warps and options.** In the Multi Mode lobby, the menu's PARTY tab has:
 
 - **Warp the party to** one of the lobby's rooms. Only the party leader can choose; the server passes the choice to every member and the whole party moves together.
 
@@ -281,7 +284,7 @@ While the menu is open the game gets no input.
 
 - **Weapons in the lobby** (off by default; the party leader's choice for the whole party): show off your gear. With it on, the lobby gets the weapon palette (hold Cross / Z and pick a weapon set as in a mission), and everyone in the party sees the weapons you draw. Switching it re-enters the room you are in, so it applies at once; off puts every weapon away and hides the palette, as in the original game. Attacks do nothing there: the lobby has no enemies.
 
-  In **Internet Multi Mode** (its lobby, and the party lobby you go to after forming a party) it is **each player's own setting**, in the same F2 row: switching it enters your area again so it applies at once. Whether the others see your drawn weapons there is still being tested.
+  In **Internet Multi Mode** (its lobby, and the party lobby you go to after forming a party) it is **each player's own setting**, in the same row of the Party tab: switching it enters your area again so it applies at once. Whether the others see your drawn weapons there is still being tested.
 
 **Test switches (any SDL build).** `PSP2I_TEST_INPUT=1` makes the client read button presses from `<data>/logs/input.cmd` (`start`, `circle`, `cross`, `up`, `down`, …, `wait500`, `f2`, `shot`, which saves the window's picture to `logs/shot_<n>.png`, `stick<u|d|l|r><ms>`, `hold<button>` / `release`, `watch<hex address>`, `dump`, `warp<dest>,<area index>,<zone>,<entry>` and `lobbyweapons<0|1>`), so test scripts can drive several clients at once without window focus. `PSP2I_NETTRACE=1` logs every ad hoc socket call; `PSP2I_RAMDUMP=1` makes F7 save the game's memory to `logs/`.
 

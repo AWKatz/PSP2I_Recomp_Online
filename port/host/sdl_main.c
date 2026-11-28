@@ -833,6 +833,16 @@ static void on_vblank(void) {
     g_menu_latched = 0;
     g_menu_fx = 0;
     menu_apply(fx);
+#ifdef PSPRECOMP_MMO_NET
+    /* one menu window, three tabs: SETTINGS (menu.c), PARTY and CHARACTER (party_ui.c) */
+    if (fx & MFX_TAB) party_ui_open_tab(g_menu.tab_req);  /* L / R or a tapped tab, from SETTINGS */
+    if (fx & MFX_OPENED) party_ui_close();                 /* F1 / R3 over the other tabs: SETTINGS */
+    if (g_menu.open && (g_party_latched & MI_TOGGLE)) {    /* F2 / L3 over SETTINGS: PARTY */
+        g_menu.open = 0;
+        party_ui_open_tab(TAB_PARTY);
+        g_party_latched = 0;
+    }
+#endif
     uint32_t game = menu_filter_game(&g_menu, pad | g_touch_bits);
     if (g_menu.open) { ax = ay = rx = ry = 128; }
 #ifdef PSPRECOMP_MMO_NET
@@ -845,6 +855,7 @@ static void on_vblank(void) {
         const uint32_t party_held = (held | menu_inputs_from_psp(g_touch_bits, ax, ay)) & ~MI_TOGGLE;
         const int grab = party_ui_update(g_menu.open ? 0 : party_held, g_menu.open ? 0 : g_party_latched, &inject);
         g_party_latched = 0;
+        if (party_ui_take_tab() == TAB_SETTINGS) menu_open_settings(&g_menu);   /* L / R or a tap, to SETTINGS */
         /* open, or closed by this very press: what is held now is the panel's, not the game's */
         if (grab || was_open || grabbed) hide = pad | g_touch_bits;
         else hide &= pad | g_touch_bits;

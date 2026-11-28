@@ -85,7 +85,7 @@ int menu_ren_parse(const char *s) {
 
 uint32_t menu_inputs_from_psp(uint32_t psp, uint8_t ax, uint8_t ay) {
     enum { P_START = 0x0008, P_UP = 0x0010, P_RIGHT = 0x0020, P_DOWN = 0x0040, P_LEFT = 0x0080,
-           P_CIRCLE = 0x2000, P_CROSS = 0x4000 };
+           P_L = 0x0100, P_R = 0x0200, P_CIRCLE = 0x2000, P_CROSS = 0x4000 };
     uint32_t m = 0;
     if ((psp & P_UP) || ay < 64)     m |= MI_UP;
     if ((psp & P_DOWN) || ay > 192)  m |= MI_DOWN;
@@ -93,6 +93,8 @@ uint32_t menu_inputs_from_psp(uint32_t psp, uint8_t ax, uint8_t ay) {
     if ((psp & P_RIGHT) || ax > 192) m |= MI_RIGHT;
     if (psp & (P_CIRCLE | P_START))  m |= MI_CONFIRM;
     if (psp & P_CROSS)               m |= MI_BACK;
+    if (psp & P_L)                   m |= MI_TAB_PREV;
+    if (psp & P_R)                   m |= MI_TAB_NEXT;
     return m;
 }
 
@@ -252,6 +254,11 @@ int menu_update(menu_state *m, uint32_t held, uint32_t latched) {
         return fx;
     }
     if (press & MI_TOGGLE) { m->open = 0; return fx | MFX_CLOSED; }
+    if (press & (MI_TAB_PREV | MI_TAB_NEXT)) {  /* L / R: another tab (the caller's) */
+        m->tab_req = (press & MI_TAB_PREV) ? TAB_N - 1 : TAB_SETTINGS + 1;
+        m->open = 0;
+        return fx | MFX_CLOSED | MFX_TAB;
+    }
     if (press & MI_BACK) {                      /* a sub-page backs out to the page it was opened from */
         if (m->page != MENU_PAGE_MAIN) { go_page(m, parent_page(m->page), page_item(m->page)); return fx; }
         m->open = 0;
@@ -414,15 +421,58 @@ static void shade(menu_image *img, int x, int y, int w, int h) {
     }
 }
 
-static void frame(menu_image *img, int x, int y, int w, int h, uint32_t rgb) {
-    for (int i = x; i < x + w; i++) { put(img, i, y, rgb); put(img, i, y + h - 1, rgb); }
-    for (int j = y; j < y + h; j++) { put(img, x, j, rgb); put(img, x + w - 1, j, rgb); }
+
+#define WHITE  MENU_C_TEXT
+#define GREY   MENU_C_DIM
+#define YELLOW MENU_C_PICK
+#define ORANGE 0xFF9040u
+
+/* ---- the window: panel and tabs (every tab's look) ------------------------------------- */
+
+static void fill_rect(menu_image *img, int x, int y, int w, int h, uint32_t argb) {
+    for (int j = y; j < y + h; j++) {
+        if (j < 0 || j >= img->h) continue;
+        for (int i = x; i < x + w; i++)
+            if (i >= 0 && i < img->w) img->px[j * img->w + i] = argb;
+    }
 }
 
-#define WHITE  0xFFFFFFu
-#define GREY   0xA0A0A0u
-#define YELLOW 0xFFD040u
-#define ORANGE 0xFF9040u
+void menu_panel(menu_image *img, int x, int y, int w, int h) {
+    fill_rect(img, x, y, w, h, MENU_C_PANEL);
+    fill_rect(img, x, y, w, 1, MENU_C_EDGE); fill_rect(img, x, y + h - 1, w, 1, MENU_C_EDGE);
+    fill_rect(img, x, y, 1, h, MENU_C_EDGE); fill_rect(img, x + w - 1, y, 1, h, MENU_C_EDGE);
+}
+
+static const char *const TAB_NAMES[TAB_N] = { "SETTINGS", "PARTY", "CHARACTER" };
+#define TAB_PAD 6                   /* each side of a tab's name */
+/* tab k's left edge and width on the bar, from the window's left */
+static void tab_span(int k, int *x, int *w) {
+    int at = 6;
+    for (int i = 0; i < k; i++) at += menu_text_width(TAB_NAMES[i]) + 2 * TAB_PAD + 2;
+    *x = at;
+    *w = menu_text_width(TAB_NAMES[k]) + 2 * TAB_PAD;
+}
+
+void menu_tabs_draw(menu_image *img, int x, int y, int w, int active, const char *path) {
+    for (int k = 0; k < TAB_N; k++) {
+        int tx, tw;
+        tab_span(k, &tx, &tw);
+        if (k == active) fill_rect(img, x + tx, y + MENU_TAB_Y - 3, tw, CELL_H + 4, MENU_C_BAR);
+        menu_text(img, x + tx + TAB_PAD, y + MENU_TAB_Y, TAB_NAMES[k], k == active ? MENU_C_TITLE : MENU_C_DIM);
+    }
+    fill_rect(img, x + 6, y + MENU_TAB_Y + CELL_H + 2, w - 12, 1, MENU_C_EDGE);   /* under the tabs */
+    if (path && *path) menu_text(img, x + w - 10 - menu_text_width(path), y + MENU_TAB_Y, path, MENU_C_DIM);
+}
+
+int menu_tab_at(int x, int y, int tx, int ty) {
+    if (ty < y + MENU_TAB_Y - 3 || ty >= y + MENU_TAB_Y + CELL_H + 1) return -1;
+    for (int k = 0; k < TAB_N; k++) {
+        int kx, kw;
+        tab_span(k, &kx, &kw);
+        if (tx >= x + kx && tx < x + kx + kw) return k;
+    }
+    return -1;
+}
 
 /* The box: 261 pixels tall with 16 items shown, one row more or less per
  * item on the page; KEYBOARD (18 rows) leaves out the two frame-rate lines. */
@@ -431,7 +481,7 @@ static int shown_items(const menu_state *m) {
     for (int i = 0; i < MENU_ITEMS; i++) n += shown(m, i);
     return n;
 }
-#define BOX_W 288
+#define BOX_W MENU_W
 #define ROW_H (CELL_H + 2)
 #define ROWS_Y (8 + CELL_H + 8)     /* the first item's row, from the box's top */
 #define VALUE_X 130                 /* the values' column, from the box's left */
@@ -459,6 +509,15 @@ int menu_touch(menu_state *m, int w, int h, int x, int y) {
         m->open = 0;
         return MFX_CLOSED;
     }
+    {   /* a tab: another one hands over to the caller */
+        const int t = menu_tab_at(x0, y0, x, y);
+        if (t >= 0) {
+            if (t == TAB_SETTINGS) return 0;
+            m->tab_req = t;
+            m->open = 0;
+            return MFX_CLOSED | MFX_TAB;
+        }
+    }
     const int row = (y - (y0 + ROWS_Y - 1)) / ROW_H;
     if (y < y0 + ROWS_Y - 1 || row < 0) return 0;
     int item = -1;
@@ -482,15 +541,12 @@ void menu_draw(const menu_state *m, menu_image *img, int game_fps, const char *h
     char line[96];
     int x0, y0, bw, bh;
     menu_box(m, img->w, img->h, &x0, &y0, &bw, &bh);
-    shade(img, x0, y0, bw, bh);
-    frame(img, x0, y0, bw, bh, GREY);
+    menu_panel(img, x0, y0, bw, bh);
+    menu_tabs_draw(img, x0, y0, bw, TAB_SETTINGS,
+                   m->page == MENU_PAGE_CONTROLS ? "CONTROLS" : m->page == MENU_PAGE_KEYS ? "CONTROLS > KEYBOARD/MOUSE"
+                   : m->page == MENU_PAGE_TESTS ? "TESTS (60 / 120 FPS)" : m->page == MENU_PAGE_GRAPHICS ? "GRAPHICS" : "");
 
-    int y = y0 + 8;
-    menu_text(img, x0 + 10, y, m->page == MENU_PAGE_CONTROLS ? "SETTINGS > CONTROLS"
-                             : m->page == MENU_PAGE_KEYS ? "SETTINGS > CONTROLS > KEYBOARD/MOUSE"
-                             : m->page == MENU_PAGE_TESTS ? "SETTINGS > TESTS (60 / 120 FPS)"
-                             : m->page == MENU_PAGE_GRAPHICS ? "SETTINGS > GRAPHICS" : "SETTINGS", WHITE);
-    y += CELL_H + 8;
+    int y = y0 + ROWS_Y;
 
     static const char *const NAMES[MENU_ITEMS] = {
         [MENU_GRAPHICS] = "GRAPHICS", [MENU_MASTER_VOL] = "MASTER VOLUME",
@@ -542,7 +598,7 @@ void menu_draw(const menu_state *m, menu_image *img, int game_fps, const char *h
     for (int i = 0; i < MENU_ITEMS; i++) {
         if (!shown(m, i)) continue;
         const uint32_t col = i == m->key_wait ? ORANGE : i == m->sel ? YELLOW : WHITE;
-        if (i == m->sel) menu_text(img, x0 + 10, y, ">", col);
+        if (i == m->sel) fill_rect(img, x0 + 6, y - 2, bw - 12, ROW_H, MENU_C_BAR);
         menu_text(img, x0 + 22, y, NAMES[i], col);
         const char *v = i == MENU_FRAME_RATE ? (m->fps == 120 ? "< 120 FPS >" : m->fps == 60 ? "< 60 FPS >" : "< 30 FPS >")
                       : i == MENU_FPS_COUNTER ? (m->show_fps ? "< ON >" : "< OFF >")
@@ -574,7 +630,7 @@ void menu_draw(const menu_state *m, menu_image *img, int game_fps, const char *h
         menu_text(img, x0 + 10, y, m->key_wait ? "PRESS A KEY OR MOUSE BUTTON   ESC: CANCEL"
                                                : "ACCEPT: CHANGE   MOUSE MOVEMENT: CAMERA", m->key_wait ? ORANGE : GREY);
         y += CELL_H + 2;
-        snprintf(line, sizeof line, "%s / R3: CLOSE   D-PAD / ARROWS: MOVE", hotkey ? hotkey : "F1");
+        snprintf(line, sizeof line, "%s / R3: CLOSE   D-PAD / ARROWS: MOVE   L / R: TAB", hotkey ? hotkey : "F1");
         menu_text(img, x0 + 10, y, line, GREY);
         return;
     }
@@ -594,8 +650,14 @@ void menu_draw(const menu_state *m, menu_image *img, int game_fps, const char *h
     snprintf(line, sizeof line, "CIRCLE (KEY %.8s): ACCEPT  CROSS (KEY %.8s): BACK", ck, xk);
     menu_text(img, x0 + 10, y, line, GREY);
     y += CELL_H + 2;
-    snprintf(line, sizeof line, "%s / R3: CLOSE   D-PAD / ARROWS: MOVE", hotkey ? hotkey : "F1");
+    snprintf(line, sizeof line, "%s / R3: CLOSE   D-PAD / ARROWS: MOVE   L / R: TAB", hotkey ? hotkey : "F1");
     menu_text(img, x0 + 10, y, line, GREY);
+}
+
+void menu_open_settings(menu_state *m) {
+    m->open = 1;
+    m->key_wait = 0;
+    go_page(m, MENU_PAGE_MAIN, -1);
 }
 
 void fps_draw(const fps_meter *fm, menu_image *img) {

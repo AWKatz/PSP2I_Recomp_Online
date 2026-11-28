@@ -589,8 +589,29 @@ static void test_draw(void) {
 
     m.open = 1;
     menu_draw(&m, &img, 30, "F1");
-    CHECK(changed_inside(96, 27, 384, 244));            /* the centred 288x217 box (12 items) */
-    CHECK(!changed_outside(96, 27, 384, 244));
+    CHECK(changed_inside(8, 27, 472, 244));             /* the centred 464x217 window (12 items) */
+    CHECK(!changed_outside(8, 27, 472, 244));
+
+    /* tabs: L / R leave SETTINGS for the caller's tabs (wrapping), and so does a tap on one */
+    CHECK(menu_inputs_from_psp(0x0100, 128, 128) == MI_TAB_PREV && menu_inputs_from_psp(0x0200, 128, 128) == MI_TAB_NEXT);
+    m.prev = 0;
+    CHECK(menu_update(&m, MI_TAB_NEXT, 0) == (MFX_CLOSED | MFX_TAB) && !m.open && m.tab_req == TAB_PARTY);
+    menu_open_settings(&m);
+    m.prev = 0;
+    CHECK(m.open && menu_update(&m, MI_TAB_PREV, 0) == (MFX_CLOSED | MFX_TAB) && m.tab_req == TAB_CHARACTER);
+    menu_open_settings(&m);
+    {
+        int tx, ty, tw, th;
+        menu_box(&m, 480, 272, &tx, &ty, &tw, &th);
+        CHECK(menu_tab_at(tx, ty, tx + 10, ty + MENU_TAB_Y + 2) == TAB_SETTINGS);
+        int k = -1;
+        for (int px = tx; px < tx + tw && k != TAB_CHARACTER; px++) k = menu_tab_at(tx, ty, px, ty + MENU_TAB_Y + 2);
+        CHECK(k == TAB_CHARACTER);
+        int cx = tx;
+        while (menu_tab_at(tx, ty, cx, ty + MENU_TAB_Y + 2) != TAB_CHARACTER) cx++;
+        CHECK(menu_touch(&m, 480, 272, cx, ty + MENU_TAB_Y + 2) == (MFX_CLOSED | MFX_TAB) && m.tab_req == TAB_CHARACTER);
+    }
+    m.open = 0;
 
     for (int i = 0; i < 480 * 272; i++) g_img[i] = 0xFF808080u;
     fps_draw(&fm, &img);                                /* top-left corner only */

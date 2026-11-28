@@ -1372,10 +1372,16 @@ static void party_step(uint32_t held, uint32_t raw) {
     const uint32_t l3 = input_sdl_host_buttons() & INPUT_HOST_LSTICK;   /* L3 opens and closes it, as F2 */
     if (l3 && !prev_l3) g_party_latched |= MI_TOGGLE;
     prev_l3 = l3;
+    if (g_menu.open && (g_party_latched & MI_TOGGLE)) {    /* F2 / L3 over SETTINGS: the PARTY tab */
+        g_menu.open = 0;
+        party_ui_open_tab(TAB_PARTY);
+        g_party_latched = 0;
+    }
     const int was_open = party_ui_open();
     uint32_t inject = 0;
     const int grab = party_ui_update(g_menu.open ? 0 : held, g_menu.open ? 0 : g_party_latched, &inject);
     g_party_latched = 0;
+    if (party_ui_take_tab() == TAB_SETTINGS) menu_open_settings(&g_menu);   /* L / R or a tap, to SETTINGS */
     /* open, or closed by this very press: what is held now is the panel's, not the game's */
     uint32_t hide = g_party_hide;
     if (grab || was_open || grabbed) hide = raw;
@@ -1413,6 +1419,9 @@ static void menu_step(void) {
     if (input_sdl_host_buttons() & (INPUT_HOST_GUIDE | INPUT_HOST_RSTICK)) held |= MI_TOGGLE;
     const int fx = menu_update(&g_menu, held, latched);
 #ifdef PSPRECOMP_MMO_NET
+    /* one menu window, three tabs: SETTINGS (menu.c), PARTY and CHARACTER (party_ui.c) */
+    if (fx & MFX_TAB) party_ui_open_tab(g_menu.tab_req);  /* L / R from SETTINGS */
+    if (fx & MFX_OPENED) party_ui_close();                 /* F1 / R3 over the other tabs: SETTINGS */
     party_step(held & ~MI_TOGGLE, psp);
 #endif
     if (fx & MFX_FPS_CHANGED) {

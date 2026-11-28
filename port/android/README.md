@@ -93,7 +93,7 @@ The app is built with online play, as the desktop builds are: Multi Mode and Int
   ```
 
   All the settings are in [docs/client_config.example.toml](../../docs/client_config.example.toml).
-- **The F2 menu:** the cyan button at the top, right of MENU (or L3 on a controller). Party finder, lobby warps and the character list. Tap a row to select it, tap it again to choose it; the touch D-pad or stick also moves, Circle chooses, Cross closes.
+- **The menu:** MENU at the top opens it on its Settings tab; the cyan button to its right (or L3 on a controller) on its Party tab, where the party finder and lobby warps are; the Character tab has the character looks. Tap a tab to switch (L / R do too). Tap a row to select it, tap it again to choose it; the touch D-pad or stick also moves, Circle chooses, Cross closes.
 - **Switching apps:** Android pauses the game while it is in the background, so a long switch away may drop you from the server.
 
 ## Not here yet

@@ -15,8 +15,10 @@
 
 #define SEC(s) ((int)((s) * 60))
 
-/* ST_MENU: the F2 menu, two columns (party and warps; characters). ST_LIST: the party finder. */
-enum { ST_HIDDEN, ST_MENU, ST_LIST };
+/* The menu window's PARTY tab (ST_PARTY, and the party finder's list, ST_LIST, a page of it)
+ * and CHARACTER tab (ST_CHARS). The SETTINGS tab is menu.c's: moving to it is handed to the
+ * caller (party_ui_take_tab). */
+enum { ST_HIDDEN, ST_PARTY, ST_CHARS, ST_LIST };
 
 /* The lobby menu: warps to the Multi Mode lobby's rooms (destination 2010000,
  * area index 0, zone 2000, by entry point; docs/area_research.md), then the
@@ -34,8 +36,8 @@ enum { A_NONE, A_FORM, A_JOIN };
 enum { S_SETTLE, S_PRESS_JOIN, S_WAIT_MATCHING, S_WAIT_TARGET, S_PICK, S_CONFIRM, S_WAIT_DONE };
 
 #define MAX_ROWS 10
-#define CHAR_ROWS 15             /* the character column: rows shown at once */
-/* the left column: PARTY FINDER, the rooms, weapons in the lobby, CLOSE */
+#define CHAR_ROWS 15             /* the CHARACTER tab: rows shown at once */
+/* the PARTY tab's rows: PARTY FINDER, the rooms, weapons in the lobby, CLOSE */
 #define L_FINDER  0
 #define L_ROOM0   1
 #define L_WEAPONS (L_ROOM0 + NROOMS)
@@ -44,8 +46,11 @@ enum { S_SETTLE, S_PRESS_JOIN, S_WAIT_MATCHING, S_WAIT_TARGET, S_PICK, S_CONFIRM
 
 static struct {
     int auto_open, state, sel, top;
-    int from_menu;               /* the finder was opened from the F2 menu: Cross goes back to it */
-    int col, lsel, rsel, rtop;   /* the F2 menu: the column in use (0 left, 1 right), each one's row */
+    int from_menu;               /* the finder was opened from the PARTY tab: Cross goes back to it */
+    int lsel, rsel, rtop;        /* the PARTY tab's row; the CHARACTER tab's row and scroll */
+    int tab_req;                 /* the SETTINGS tab asked for (party_ui_take_tab), else -1 */
+    int fresh;                   /* opened since the last update: what is held came from before (the
+                                    caller's L / R, F2) and is not a press here */
     int nchars, cur_char;        /* characters: records found, the one worn (-1: your own) */
     int hold;                    /* vblanks Up/Down has been held, for auto-repeat */
     psp_net_mmo_party parties[PSP_MMO_PARTY_LIST_MAX];
@@ -75,9 +80,12 @@ static uint16_t lobby_flags(void) {
 void party_ui_init(int auto_open) {
     memset(&U, 0, sizeof U);
     U.auto_open = auto_open;
+    U.tab_req = -1;
 }
 
 int party_ui_open(void) { return U.state != ST_HIDDEN; }
+void party_ui_close(void) { U.state = ST_HIDDEN; }
+int party_ui_take_tab(void) { const int t = U.tab_req; U.tab_req = -1; return t; }
 
 static void notice(const char *s, int secs) {
     snprintf(U.notice, sizeof U.notice, "%s", s);
@@ -108,17 +116,30 @@ static int char_rows(void) { return U.nchars + 1; }    /* MY OWN CHARACTER, then
 
 static void open_panel(void);
 
-/* The F2 menu. The column that fits where you are is the one in use: the
- * rooms in the lobby, the finder at the Matching Counter, else the characters. */
-static void open_menu(const psp_net_mmo_status *st, int role) {
-    U.state = ST_MENU;
+/* A tab of the menu window. PARTY's cursor starts where it is most useful: the rooms in the
+ * Multi Mode lobby, lobby weapons in Internet Multi Mode's, else the party finder.
+ * CHARACTER's starts on the look worn. */
+void party_ui_open_tab(int tab) {
+    U.fresh = 1;
     U.nchars = charswap_count();
     U.cur_char = U.nchars ? charswap_current() : -1;
     U.rsel = U.cur_char + 1;
     U.rtop = U.rsel - CHAR_ROWS / 2;
-    if (in_lobby()) { U.col = 0; U.lsel = L_ROOM0; }
-    else if (!finder_closed(st, role)) { U.col = 0; U.lsel = L_FINDER; }
-    else { U.col = 1; U.lsel = L_FINDER; }
+    if (U.rtop > char_rows() - CHAR_ROWS) U.rtop = char_rows() - CHAR_ROWS;
+    if (U.rtop < 0) U.rtop = 0;
+    if (tab == TAB_CHARACTER) { U.state = ST_CHARS; return; }
+    U.state = ST_PARTY;
+    U.lsel = lobby_internet_lobby() ? L_WEAPONS : in_lobby() ? L_ROOM0 : L_FINDER;
+}
+
+/* L / R: the next tab (SETTINGS, PARTY, CHARACTER, wrapping); SETTINGS is handed to the caller. */
+static int tab_step(uint32_t pressed) {
+    if (!(pressed & (MI_TAB_PREV | MI_TAB_NEXT)) || U.state == ST_HIDDEN) return 0;
+    const int cur = U.state == ST_CHARS ? TAB_CHARACTER : TAB_PARTY;
+    const int to = (cur + ((pressed & MI_TAB_NEXT) ? 1 : TAB_N - 1)) % TAB_N;
+    if (to == TAB_SETTINGS) { U.state = ST_HIDDEN; U.tab_req = TAB_SETTINGS; }
+    else party_ui_open_tab(to);
+    return 1;
 }
 
 static void choose_char(int row) {
@@ -192,7 +213,7 @@ static void stop_auto(const char *why) {
 }
 
 static void choose(int row) {
-    if (row == row_close()) { U.state = U.from_menu ? ST_MENU : ST_HIDDEN; return; }
+    if (row == row_close()) { U.state = U.from_menu ? ST_PARTY : ST_HIDDEN; return; }
     if (row == row_start()) {
         U.state = ST_HIDDEN;
         U.act = A_FORM; U.step = S_SETTLE; U.wait = SEC(0.5); U.timeout = 0;
@@ -284,12 +305,13 @@ int party_ui_update(uint32_t held, uint32_t latched, uint32_t *inject) {
     if (!st.adhocctl) U.since_init = 0;
     else if (U.since_init < SEC(60)) U.since_init++;
 
-    const uint32_t pressed = (held & ~U.prev_held) | latched;
+    uint32_t pressed = (held & ~U.prev_held) | latched;
     U.prev_held = held;
+    if (U.fresh) { U.fresh = 0; pressed &= MI_TOGGLE; }
     if (pressed & MI_TOGGLE) {
         if (U.state != ST_HIDDEN) U.state = ST_HIDDEN;
         else if (U.act != A_NONE) stop_auto("Party finder stopped.");
-        else open_menu(&st, role);
+        else party_ui_open_tab(TAB_PARTY);
     }
 
     /* Up / Down held: repeated after a third of a second, then 10 a second */
@@ -298,28 +320,30 @@ int party_ui_update(uint32_t held, uint32_t latched, uint32_t *inject) {
         if (++U.hold > 20 && (U.hold - 20) % 6 == 0) nav |= held & (MI_UP | MI_DOWN);
     } else U.hold = 0;
 
-    if (U.state == ST_MENU) {
-        if (nav & (MI_LEFT | MI_RIGHT)) U.col = !U.col;
-        if (U.col == 0) {
-            if (nav & MI_UP) U.lsel = (U.lsel + L_ROWS - 1) % L_ROWS;
-            if (nav & MI_DOWN) U.lsel = (U.lsel + 1) % L_ROWS;
-        } else {
-            if (nav & MI_UP) U.rsel = (U.rsel + char_rows() - 1) % char_rows();
-            if (nav & MI_DOWN) U.rsel = (U.rsel + 1) % char_rows();
-        }
-        /* the character column's scroll: the chosen row in view, the list's end at the bottom */
+    const int switched = tab_step(pressed);               /* L / R: nothing else this frame */
+
+    if (!switched && U.state == ST_PARTY) {
+        if (nav & MI_UP) U.lsel = (U.lsel + L_ROWS - 1) % L_ROWS;
+        if (nav & MI_DOWN) U.lsel = (U.lsel + 1) % L_ROWS;
+        if (pressed & MI_BACK) U.state = ST_HIDDEN;
+        else if (pressed & MI_CONFIRM) choose_left(U.lsel, &st, role);
+    }
+    else if (!switched && U.state == ST_CHARS) {
+        const int n = char_rows();
+        if (nav & MI_UP) U.rsel = (U.rsel + n - 1) % n;
+        if (nav & MI_DOWN) U.rsel = (U.rsel + 1) % n;
+        if (pressed & MI_LEFT) U.rsel = U.rsel > CHAR_ROWS ? U.rsel - CHAR_ROWS : 0;          /* a page */
+        if (pressed & MI_RIGHT) U.rsel = U.rsel + CHAR_ROWS < n ? U.rsel + CHAR_ROWS : n - 1;
+        /* the scroll: the chosen row in view, the list's end at the bottom */
         if (U.rsel < U.rtop) U.rtop = U.rsel;
         if (U.rsel >= U.rtop + CHAR_ROWS) U.rtop = U.rsel - CHAR_ROWS + 1;
-        if (U.rtop > char_rows() - CHAR_ROWS) U.rtop = char_rows() - CHAR_ROWS;
+        if (U.rtop > n - CHAR_ROWS) U.rtop = n - CHAR_ROWS;
         if (U.rtop < 0) U.rtop = 0;
         if (pressed & MI_BACK) U.state = ST_HIDDEN;
-        else if (pressed & MI_CONFIRM) {
-            if (U.col == 0) choose_left(U.lsel, &st, role);
-            else choose_char(U.rsel);
-        }
+        else if (pressed & MI_CONFIRM) choose_char(U.rsel);
     }
 
-    if (U.state == ST_LIST) {
+    if (!switched && U.state == ST_LIST) {
         if (++U.since_request >= SEC(2)) { U.since_request = 0; psp_net_mmo_request_parties(); }
         unsigned g;
         int players;
@@ -337,7 +361,7 @@ int party_ui_update(uint32_t held, uint32_t latched, uint32_t *inject) {
         }
         if (nav & MI_UP) U.sel = (U.sel + nrows() - 1) % nrows();
         if (nav & MI_DOWN) U.sel = (U.sel + 1) % nrows();
-        if (pressed & MI_BACK) U.state = U.from_menu ? ST_MENU : ST_HIDDEN;
+        if (pressed & MI_BACK) U.state = U.from_menu ? ST_PARTY : ST_HIDDEN;
         else if (pressed & MI_CONFIRM) choose(U.sel);
         if (U.sel < U.top) U.top = U.sel;
         if (U.sel >= U.top + MAX_ROWS) U.top = U.sel - MAX_ROWS + 1;
@@ -353,10 +377,10 @@ int party_ui_update(uint32_t held, uint32_t latched, uint32_t *inject) {
 
 #define W_   480
 #define H_   272
-#define WHITE  0xFFFFFF
-#define GREY   0x8890A0
-#define YELLOW 0xFFD040
-#define CYAN   0x60D8FF
+#define WHITE  MENU_C_TEXT
+#define GREY   MENU_C_DIM
+#define YELLOW MENU_C_PICK
+#define CYAN   MENU_C_TITLE
 
 static void fill(menu_image *img, int x, int y, int w, int h, uint32_t argb) {
     for (int j = y; j < y + h; j++)
@@ -364,58 +388,55 @@ static void fill(menu_image *img, int x, int y, int w, int h, uint32_t argb) {
             if (i >= 0 && j >= 0 && i < img->w && j < img->h) img->px[j * img->w + i] = argb;
 }
 
-static void frame_box(menu_image *img, int x, int y, int w, int h) {
-    fill(img, x, y, w, h, 0xFF101828);
-    fill(img, x, y, w, 1, 0xFF6080C0); fill(img, x, y + h - 1, w, 1, 0xFF6080C0);
-    fill(img, x, y, 1, h, 0xFF6080C0); fill(img, x + w - 1, y, 1, h, 0xFF6080C0);
+/* The window's layout in the 480x272 picture, shared by drawing and taps: the same size and
+ * look as the SETTINGS tab (menu.c's panel and tab bar). */
+static void tab_geom(int *x, int *y, int *w, int *h) {
+    *w = MENU_W; *h = MENU_ROWS_Y + CHAR_ROWS * 12 + 20; *x = (W_ - *w) / 2; *y = (H_ - *h) / 2;
 }
-
-/* The panels' layout in the 480x272 picture, shared by drawing and taps. */
-#define MENU_W  464
-#define MENU_LW 204                 /* the left column's width */
-static void menu_geom(int *x, int *y, int *w, int *h) {
-    *w = MENU_W; *h = 26 + CHAR_ROWS * 12 + 20; *x = (W_ - *w) / 2; *y = (H_ - *h) / 2;
+static int party_row_y(int y, int i) {   /* the PARTY tab's rows, in groups */
+    return y + MENU_ROWS_Y + i * 12 + (i >= L_ROOM0 ? 4 : 0) + (i >= L_WEAPONS ? 4 : 0) + (i >= L_CLOSE ? 4 : 0);
 }
-static int left_row_y(int y, int i) {   /* the left column's rows, in groups */
-    return y + 26 + i * 12 + (i >= L_ROOM0 ? 4 : 0) + (i >= L_WEAPONS ? 4 : 0) + (i >= L_CLOSE ? 4 : 0);
-}
-static int right_row_y(int y, int r) { return y + 26 + r * 12; }
+static int char_row_y(int y, int r) { return y + MENU_ROWS_Y + r * 12; }
 static int list_rows(void) { return nrows() < MAX_ROWS ? nrows() : MAX_ROWS; }
 static void list_geom(int *x, int *y, int *w, int *h) {
-    *w = 300; *h = 44 + list_rows() * 12 + 16; *x = (W_ - *w) / 2; *y = (H_ - *h) / 2;
+    *w = MENU_W; *h = MENU_ROWS_Y + 14 + list_rows() * 12 + 20; *x = (W_ - *w) / 2; *y = (H_ - *h) / 2;
 }
-static int list_row_y(int y, int r) { return y + 38 + r * 12; }
+static int list_row_y(int y, int r) { return y + MENU_ROWS_Y + 14 + r * 12; }
 static int on_row(int ty, int ly) { return ty >= ly - 2 && ty < ly + 10; }   /* a row's highlight, and a little below */
 
 int party_ui_touch(int tx, int ty) {
     int x, y, w, h;
-    if (U.state == ST_MENU) {
-        menu_geom(&x, &y, &w, &h);
-        if (tx < x || ty < y || tx >= x + w || ty >= y + h) return 0;
+    if (U.state == ST_HIDDEN) return 0;
+    if (U.state == ST_LIST) list_geom(&x, &y, &w, &h);
+    else tab_geom(&x, &y, &w, &h);
+    if (tx < x || ty < y || tx >= x + w || ty >= y + h) return 0;
+    {   /* a tab */
+        const int t = menu_tab_at(x, y, tx, ty);
+        if (t >= 0) {
+            if (t == TAB_SETTINGS) { U.state = ST_HIDDEN; U.tab_req = TAB_SETTINGS; }
+            else if (t != (U.state == ST_CHARS ? TAB_CHARACTER : TAB_PARTY)) party_ui_open_tab(t);
+            return 1;
+        }
+    }
+    if (U.state == ST_PARTY) {
         psp_net_mmo_status st;
         psp_net_mmo_get_status(&st);
         const int role = psp_net_mmo_party_role();
-        if (tx < x + MENU_LW) {
-            for (int i = 0; i < L_ROWS; i++) {
-                if (!on_row(ty, left_row_y(y, i))) continue;
-                if (U.col == 0 && U.lsel == i) choose_left(i, &st, role);
-                else { U.col = 0; U.lsel = i; }
-                break;
-            }
-        } else {
-            for (int r = 0; r < CHAR_ROWS && U.rtop + r < char_rows(); r++) {
-                const int i = U.rtop + r;
-                if (!on_row(ty, right_row_y(y, r))) continue;
-                if (U.col == 1 && U.rsel == i) choose_char(i);
-                else { U.col = 1; U.rsel = i; }
-                break;
-            }
+        for (int i = 0; i < L_ROWS; i++) {
+            if (!on_row(ty, party_row_y(y, i))) continue;
+            if (U.lsel == i) choose_left(i, &st, role);
+            else U.lsel = i;
+            break;
         }
-        return 1;
-    }
-    if (U.state == ST_LIST) {
-        list_geom(&x, &y, &w, &h);
-        if (tx < x || ty < y || tx >= x + w || ty >= y + h) return 0;
+    } else if (U.state == ST_CHARS) {
+        for (int r = 0; r < CHAR_ROWS && U.rtop + r < char_rows(); r++) {
+            const int i = U.rtop + r;
+            if (!on_row(ty, char_row_y(y, r))) continue;
+            if (U.rsel == i) choose_char(i);
+            else U.rsel = i;
+            break;
+        }
+    } else {
         for (int r = 0; r < list_rows(); r++) {
             const int i = U.top + r;
             if (!on_row(ty, list_row_y(y, r))) continue;
@@ -423,62 +444,65 @@ int party_ui_touch(int tx, int ty) {
             else U.sel = i;
             break;
         }
-        return 1;
     }
-    return 0;
+    return 1;
 }
 
+#define HINT "Circle: choose   Cross: close   L / R: tab   F2 / L3: menu"
+
 int party_ui_draw(menu_image *img, int *bx, int *by, int *bw, int *bh) {
-    if (U.state == ST_MENU) {
+    char line[96];
+    if (U.state == ST_PARTY) {
         psp_net_mmo_status st;
         psp_net_mmo_get_status(&st);
         const int role = psp_net_mmo_party_role();
         const int finder = !finder_closed(&st, role), lobby = in_lobby(), leader = role == PSP_MMO_PARTY_LEADER;
         int x, y, w, h;
-        menu_geom(&x, &y, &w, &h);
-        const int lw = MENU_LW, rx = x + lw + 4, rw = w - lw - 4;
-        frame_box(img, x, y, w, h);
-        fill(img, x + lw, y + 6, 1, h - 24, 0xFF6080C0);
-        char line[96];
-        menu_text(img, x + 10, y + 8, "PARTY", U.col == 0 ? CYAN : GREY);
-        menu_text(img, rx + 6, y + 8, "CHARACTER", U.col == 1 ? CYAN : GREY);
-        snprintf(line, sizeof line, "%d/%d", U.rsel + 1, char_rows());
-        menu_text(img, x + w - 10 - menu_text_width(line), y + 8, line, GREY);
-        for (int i = 0; i < L_ROWS; i++) {   /* the left column, in groups */
-            const int ly = left_row_y(y, i);
+        tab_geom(&x, &y, &w, &h);
+        menu_panel(img, x, y, w, h);
+        menu_tabs_draw(img, x, y, w, TAB_PARTY, "");
+        for (int i = 0; i < L_ROWS; i++) {
+            const int ly = party_row_y(y, i);
             uint32_t col = WHITE;
-            if (i == L_FINDER) { snprintf(line, sizeof line, "Party finder"); if (!finder) col = GREY; }
-            else if (i < L_WEAPONS) { snprintf(line, sizeof line, "%s", ROOMS[i - L_ROOM0].name); if (!lobby || !leader) col = GREY; }
-            else if (i == L_WEAPONS) {
+            const char *why = "";
+            if (i == L_FINDER) { snprintf(line, sizeof line, "Party finder"); if (!finder) { col = GREY; why = "at the Multi Mode Matching Counter"; } }
+            else if (i < L_WEAPONS) {
+                snprintf(line, sizeof line, "Warp the party: %s", ROOMS[i - L_ROOM0].name);
+                if (!lobby || !leader) { col = GREY; why = lobby ? "the party leader only" : "in the Multi Mode lobby"; }
+            } else if (i == L_WEAPONS) {
                 snprintf(line, sizeof line, "Lobby weapons: %s", lobby_weapons() ? "ON" : "OFF");
-                if ((!lobby || !leader) && !lobby_internet_lobby()) col = GREY;
-            }
-            else snprintf(line, sizeof line, "Close");
-            if (i == U.lsel) {
-                fill(img, x + 6, ly - 2, lw - 12, 11, U.col == 0 ? 0xFF304878 : 0xFF1C2A44);
-                if (U.col == 0 && col == WHITE) col = YELLOW;
-            }
+                if (lobby_internet_lobby()) why = "your own setting";
+                else if (!lobby || !leader) { col = GREY; why = lobby ? "the party leader only" : "in a lobby"; }
+            } else snprintf(line, sizeof line, "Close");
+            if (i == U.lsel) { fill(img, x + 6, ly - 2, w - 12, 11, MENU_C_BAR); if (col == WHITE) col = YELLOW; }
             menu_text(img, x + 12, ly, line, col);
+            if (*why && i == U.lsel) menu_text(img, x + w - 12 - menu_text_width(why), ly, why, GREY);   /* the chosen row's */
         }
+        menu_text(img, x + 10, y + h - 12, HINT, GREY);
+        *bx = x; *by = y; *bw = w; *bh = h;
+        return 1;
+    }
+    if (U.state == ST_CHARS) {
+        int x, y, w, h;
+        tab_geom(&x, &y, &w, &h);
+        menu_panel(img, x, y, w, h);
+        snprintf(line, sizeof line, "%d / %d", U.rsel + 1, char_rows());
+        menu_tabs_draw(img, x, y, w, TAB_CHARACTER, line);
         const int n = char_rows();
-        for (int r = 0; r < CHAR_ROWS && U.rtop + r < n; r++) {   /* the right column */
-            const int i = U.rtop + r, ly = right_row_y(y, r);
+        for (int r = 0; r < CHAR_ROWS && U.rtop + r < n; r++) {
+            const int i = U.rtop + r, ly = char_row_y(y, r);
             const int worn = i == U.cur_char + 1;
             uint32_t col = WHITE;
             if (i == 0) snprintf(line, sizeof line, "%sMy own character", worn ? "* " : "  ");
-            else snprintf(line, sizeof line, "%s%-24.24s", worn ? "* " : "  ", charswap_name(i - 1));
-            if (i == U.rsel) {
-                fill(img, rx + 2, ly - 2, rw - 8, 11, U.col == 1 ? 0xFF304878 : 0xFF1C2A44);
-                if (U.col == 1) col = YELLOW;
-            }
-            menu_text(img, rx + 6, ly, line, col);
-            if (i) menu_text(img, x + w - 10 - menu_text_width(charswap_kind(i - 1)), ly, charswap_kind(i - 1), GREY);
+            else snprintf(line, sizeof line, "%s%s", worn ? "* " : "  ", charswap_name(i - 1));
+            if (i == U.rsel) { fill(img, x + 6, ly - 2, w - 12, 11, MENU_C_BAR); col = YELLOW; }
+            menu_text(img, x + 12, ly, line, col);
+            if (i) menu_text(img, x + w - 12 - menu_text_width(charswap_kind(i - 1)), ly, charswap_kind(i - 1), GREY);
         }
         if (!U.nchars) {
-            menu_text(img, rx + 6, y + 26 + 18, "Partner characters load in", GREY);
-            menu_text(img, rx + 6, y + 26 + 30, "the lobby and in missions.", GREY);
+            menu_text(img, x + 12, char_row_y(y, 2), "The partner characters load in the lobby and in missions.", GREY);
         }
-        menu_text(img, x + 10, y + h - 12, "Circle: choose   Cross: close   Left/Right: column   F2 / L3: menu", GREY);
+        menu_text(img, x + 10, y + h - 12, "Circle: wear   Cross: close   Left / Right: page   L / R: tab", GREY);
         *bx = x; *by = y; *bw = w; *bh = h;
         return 1;
     }
@@ -486,13 +510,11 @@ int party_ui_draw(menu_image *img, int *bx, int *by, int *bw, int *bh) {
         const int rows = list_rows();
         int x, y, w, h;
         list_geom(&x, &y, &w, &h);
-        frame_box(img, x, y, w, h);
-        menu_text(img, x + 10, y + 8, "PARTY FINDER", CYAN);
-        char line[96];
-        snprintf(line, sizeof line, "%d online, %d %s", U.players, U.nparties, U.nparties == 1 ? "party" : "parties");
-        menu_text(img, x + w - 10 - menu_text_width(line), y + 8, line, GREY);
-        if (!U.nparties) menu_text(img, x + 10, y + 22, "No parties yet: start one, or wait.", GREY);
-        else menu_text(img, x + 10, y + 22, "Pick a party to join:", GREY);
+        menu_panel(img, x, y, w, h);
+        menu_tabs_draw(img, x, y, w, TAB_PARTY, "PARTY FINDER");
+        snprintf(line, sizeof line, "%s   %d online, %d %s", U.nparties ? "Pick a party to join:" : "No parties yet: start one, or wait.",
+                 U.players, U.nparties, U.nparties == 1 ? "party" : "parties");
+        menu_text(img, x + 10, y + MENU_ROWS_Y, line, GREY);
         for (int r = 0; r < rows; r++) {
             const int i = U.top + r, ly = list_row_y(y, r);
             uint32_t col = WHITE;
@@ -503,16 +525,16 @@ int party_ui_draw(menu_image *img, int *bx, int *by, int *bw, int *bh) {
                 if (!p->open) col = GREY;
             } else if (i == row_start()) snprintf(line, sizeof line, "START A PARTY");
             else snprintf(line, sizeof line, "CHOOSE MYSELF (close)");
-            if (i == U.sel) { fill(img, x + 6, ly - 2, w - 12, 11, 0xFF304878); col = i < U.nparties && !U.parties[i].open ? GREY : YELLOW; }
+            if (i == U.sel) { fill(img, x + 6, ly - 2, w - 12, 11, MENU_C_BAR); col = i < U.nparties && !U.parties[i].open ? GREY : YELLOW; }
             menu_text(img, x + 12, ly, line, col);
         }
-        menu_text(img, x + 10, y + h - 12, "Circle: choose   Cross: close   F2 / L3: finder", GREY);
+        menu_text(img, x + 10, y + h - 12, HINT, GREY);
         *bx = x; *by = y; *bw = w; *bh = h;
         return 1;
     }
     if (U.notice_left > 0 && U.notice[0]) {
         const int w = menu_text_width(U.notice) + 20, h = 17, x = (W_ - w) / 2, y = 6;
-        frame_box(img, x, y, w, h);
+        menu_panel(img, x, y, w, h);
         menu_text(img, x + 10, y + 5, U.notice, WHITE);
         *bx = x; *by = y; *bw = w; *bh = h;
         return 1;

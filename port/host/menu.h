@@ -21,7 +21,30 @@ enum {
     MI_RIGHT   = 1 << 4,
     MI_CONFIRM = 1 << 5,   /* change the selected value / activate Close */
     MI_BACK    = 1 << 6,   /* cancel: closes */
+    MI_TAB_PREV = 1 << 7,  /* L: the tab to the left */
+    MI_TAB_NEXT = 1 << 8,  /* R: the tab to the right */
 };
+
+/* The menu window's tabs. SETTINGS is this file's; PARTY and CHARACTER are the
+ * F2 menu's (party_ui.c, MMO builds). One shows at a time; L / R move between
+ * them (wrapping), and a tab can be tapped. When the user leaves SETTINGS for
+ * another tab, menu_update / menu_touch close the settings and report
+ * MFX_TAB with tab_req; the caller opens that tab (party_ui_open_tab). */
+enum { TAB_SETTINGS, TAB_PARTY, TAB_CHARACTER, TAB_N };
+
+/* The window's look, shared by every tab: a solid navy panel, a blue edge,
+ * cyan headings, a blue bar under the chosen row. 0xAARRGGBB. */
+#define MENU_W          464
+#define MENU_C_PANEL    0xFF101828u
+#define MENU_C_EDGE     0xFF6080C0u
+#define MENU_C_BAR      0xFF304878u
+#define MENU_C_BAR_DIM  0xFF1C2A44u
+#define MENU_C_TITLE    0x60D8FFu
+#define MENU_C_TEXT     0xFFFFFFu
+#define MENU_C_DIM      0x8890A0u
+#define MENU_C_PICK     0xFFD040u
+#define MENU_TAB_Y      8          /* the tab bar's row, from the window's top */
+#define MENU_ROWS_Y     26         /* the first row of a tab's content */
 
 /* Menu items, top to bottom: the main page, then the CONTROLS, TESTS and
  * GRAPHICS pages (opened from their items; BACK, or Cross, returns to the
@@ -106,6 +129,7 @@ enum {
     MFX_KEY_WAIT    = 1 << 25,  /* a KEYBOARD row chosen: key_wait is set; the caller binds the next key
                                    (menu_key_done), Escape cancels */
     MFX_KEYS_RESET  = 1 << 26,  /* KEYBOARD > DEFAULT KEYS: the caller restores the bindings and key_name */
+    MFX_TAB         = 1 << 27,  /* another tab chosen (L / R, or tapped): the settings closed; open tab_req */
 };
 
 typedef struct {
@@ -145,7 +169,13 @@ typedef struct {
     uint32_t prev;         /* MI_* held last update, for press detection */
     int      hold;         /* updates Up/Down has been held, for auto-repeat */
     uint32_t game_mask;    /* PSP buttons held through a close, kept from the game until released */
+    int      tab_req;      /* MFX_TAB: the tab to show (TAB_*) */
 } menu_state;
+
+/* Open the settings tab (its main page), e.g. when the user moves to it from
+ * another tab. */
+void menu_open_settings(menu_state *m);
+
 
 void menu_init(menu_state *m, int fps, int show_fps);
 
@@ -200,6 +230,13 @@ double fps_meter_value(const fps_meter *fm);
 
 /* ---- drawing into a 0xAARRGGBB image -------------------------------------- */
 typedef struct { uint32_t *px; int w, h; } menu_image;
+
+/* The window's panel, and its tab bar at (x + 6, y + MENU_TAB_Y): `active`
+ * highlighted; `path` (a sub-page, "" for none) on the bar's right. */
+void menu_panel(menu_image *img, int x, int y, int w, int h);
+void menu_tabs_draw(menu_image *img, int x, int y, int w, int active, const char *path);
+/* The tab a tap at (tx, ty) hits, in a window at (x, y): TAB_*, or -1. */
+int  menu_tab_at(int x, int y, int tx, int ty);
 
 /* game_fps: the frame rate the game's own timing state holds (what the
  * setting reached), 0 if unknown. hotkey: the keyboard hotkey's name. */

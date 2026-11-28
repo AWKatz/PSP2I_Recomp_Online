@@ -1,11 +1,13 @@
-/* The F2 menu (MMO builds), over the game; F2 (keyboard) or L3 (controller)
- * opens and closes it any time. Two columns, Left / Right between them:
+/* The menu window's PARTY and CHARACTER tabs (MMO builds; its SETTINGS tab is
+ * menu.c's, in the same look). F2 (keyboard) or L3 (controller) opens the
+ * window on PARTY, and closes it; L / R move between the tabs, handing over to
+ * SETTINGS (party_ui_take_tab) and back (party_ui_open_tab).
  *
- *   - PARTY (left): the party finder, the lobby's rooms and weapons in the
- *     lobby (below). Rows that don't apply where you are are greyed, and say
- *     why when chosen.
- *   - CHARACTER (right): wear the look of one of the game's partner
- *     characters, or your own again (charswap.c).
+ *   - PARTY: the party finder, the lobby's rooms and weapons in the lobby
+ *     (below). Rows that don't apply where you are are greyed, and the chosen
+ *     one says why.
+ *   - CHARACTER: wear the look of one of the game's partner characters, or
+ *     your own again (charswap.c). Left / Right turn a page.
  *
  * D-pad or stick to move (Up / Down repeat when held), Circle to choose,
  * Cross to close (X and Z on the keyboard).
@@ -15,7 +17,7 @@
  * by pressing the Matching Counter's buttons for them.
  *
  *   - Opens by itself when the game enters the Matching Counter (Multi Mode)
- *     and the player is in no party; from the F2 menu otherwise.
+ *     and the player is in no party; from the PARTY tab otherwise.
  *   - JOIN: the game's Join Party search is steered to the chosen leader
  *     (psp_net_mmo_set_join_target), then Join Party, the party, and the
  *     confirmation are pressed, each once the network shows the game is ready
@@ -49,6 +51,13 @@ int party_ui_update(uint32_t held, uint32_t latched, uint32_t *inject);
 int party_ui_draw(menu_image *img, int *x, int *y, int *w, int *h);
 
 int party_ui_open(void);
+
+/* The menu window's tabs (menu.h TAB_*): open PARTY or CHARACTER; close them (the
+ * SETTINGS tab is opening); and the tab the user moved to that isn't this
+ * file's (TAB_SETTINGS), once, else -1 -- the caller opens it (menu_open_settings). */
+void party_ui_open_tab(int tab);
+void party_ui_close(void);
+int  party_ui_take_tab(void);
 
 /* A tap at (x, y) in the 480x272 picture (touch screens): on a row, it is
  * selected, and chosen if it already was. Returns 1 if the tap was on the
